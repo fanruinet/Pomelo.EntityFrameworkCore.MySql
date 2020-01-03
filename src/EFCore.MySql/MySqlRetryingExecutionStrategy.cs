@@ -3,7 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using EFCore.MySql.Storage.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore.Storage;
 using MySql.Data.MySqlClient;
@@ -112,17 +112,6 @@ namespace Microsoft.EntityFrameworkCore
             }
 
             return MySqlTransientExceptionDetector.ShouldRetryOn(exception);
-        }
-
-        protected override TimeSpan? GetNextDelay(Exception lastException)
-        {
-            var baseDelay = base.GetNextDelay(lastException);
-            if (baseDelay == null)
-            {
-                return null;
-            }
-
-            return baseDelay;
         }
     }
 }

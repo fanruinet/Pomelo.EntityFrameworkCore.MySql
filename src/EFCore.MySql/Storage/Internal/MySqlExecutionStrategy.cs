@@ -7,8 +7,9 @@ using System.Threading.Tasks;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Pomelo.EntityFrameworkCore.MySql.Internal;
 
-namespace EFCore.MySql.Storage.Internal
+namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 {
     /// <summary>
     ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -44,11 +45,11 @@ namespace EFCore.MySql.Storage.Internal
         {
             try
             {
-                return operation(Dependencies.CurrentDbContext.Context, state);
+                return operation(Dependencies.CurrentContext.Context, state);
             }
             catch (Exception ex) when (ExecutionStrategy.CallOnWrappedException(ex, MySqlTransientExceptionDetector.ShouldRetryOn))
             {
-                throw new InvalidOperationException("Transient exception detected", ex);
+                throw new InvalidOperationException(MySqlStrings.TransientExceptionDetected, ex);
             }
         }
 
@@ -64,11 +65,11 @@ namespace EFCore.MySql.Storage.Internal
         {
             try
             {
-                return await operation(Dependencies.CurrentDbContext.Context, state, cancellationToken);
+                return await operation(Dependencies.CurrentContext.Context, state, cancellationToken);
             }
             catch (Exception ex) when (ExecutionStrategy.CallOnWrappedException(ex, MySqlTransientExceptionDetector.ShouldRetryOn))
             {
-                throw new InvalidOperationException("Transient exception detected", ex);
+                throw new InvalidOperationException(MySqlStrings.TransientExceptionDetected, ex);
             }
         }
     }

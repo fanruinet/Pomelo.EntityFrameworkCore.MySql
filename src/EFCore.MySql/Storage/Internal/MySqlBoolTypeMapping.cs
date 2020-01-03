@@ -5,49 +5,54 @@ using System.Data;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore.Storage;
 
-namespace EFCore.MySql.Storage.Internal
+namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 {
     /// <summary>
-    ///     <para>
-    ///         Represents the mapping between a .NET <see cref="bool" /> type and a database type.
-    ///     </para>
-    ///     <para>
-    ///         This type is typically used by database providers (and other extensions). It is generally
-    ///         not used in application code.
-    ///     </para>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    public class MySqlBoolTypeMapping : RelationalTypeMapping
+    public class MySqlBoolTypeMapping : BoolTypeMapping
     {
-        /// <summary>
-        ///     Initializes a new instance of the <see cref="BoolTypeMapping" /> class.
-        /// </summary>
-        /// <param name="storeType"> The name of the database type. </param>
-        /// <param name="dbType"> The <see cref="DbType" /> to be used. </param>
         public MySqlBoolTypeMapping(
             [NotNull] string storeType,
-            [CanBeNull] DbType? dbType = null)
-            : base(storeType, typeof(bool), dbType, unicode: false, size: null)
+            DbType? dbType = null,
+            int? size = null)
+            : this(new RelationalTypeMappingParameters(
+                new CoreTypeMappingParameters(typeof(bool)),
+                storeType,
+                size == null ? StoreTypePostfix.None : StoreTypePostfix.Size,
+                dbType,
+                size: size))
+        {
+        }
+
+        /// <summary>
+        ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+        ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+        ///     any release. You should only use it directly in your code with extreme caution and knowing that
+        ///     doing so can result in application failures when updating to a new Entity Framework Core release.
+        /// </summary>
+        protected MySqlBoolTypeMapping(RelationalTypeMappingParameters parameters)
+            : base(parameters)
         {
         }
 
         /// <summary>
         ///     Creates a copy of this mapping.
         /// </summary>
-        /// <param name="storeType"> The name of the database type. </param>
-        /// <param name="size"> The size of data the property is configured to store, or null if no size is configured. </param>
+        /// <param name="parameters"> The parameters for this mapping. </param>
         /// <returns> The newly created mapping. </returns>
-        public override RelationalTypeMapping Clone(string storeType, int? size)
-            => new MySqlBoolTypeMapping(
-                storeType,
-                DbType);
+        protected override RelationalTypeMapping Clone(RelationalTypeMappingParameters parameters)
+            => new MySqlBoolTypeMapping(parameters);
 
         /// <summary>
-        ///     Generates the SQL representation of a literal value.
+        ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+        ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+        ///     any release. You should only use it directly in your code with extreme caution and knowing that
+        ///     doing so can result in application failures when updating to a new Entity Framework Core release.
         /// </summary>
-        /// <param name="value">The literal value.</param>
-        /// <returns>
-        ///     The generated string.
-        /// </returns>
         protected override string GenerateNonNullSqlLiteral(object value)
             => (bool)value ? "TRUE" : "FALSE";
     }

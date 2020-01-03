@@ -3,53 +3,68 @@
 
 using System;
 using System.Data;
+using System.Data.Common;
 using JetBrains.Annotations;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
-namespace EFCore.MySql.Storage.Internal
+namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 {
     /// <summary>
-    ///     <para>
-    ///         Represents the mapping between a .NET <see cref="DateTime" /> type and a database type.
-    ///     </para>
-    ///     <para>
-    ///         This type is typically used by database providers (and other extensions). It is generally
-    ///         not used in application code.
-    ///     </para>
+    ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+    ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+    ///     any release. You should only use it directly in your code with extreme caution and knowing that
+    ///     doing so can result in application failures when updating to a new Entity Framework Core release.
     /// </summary>
-    public class MySqlDateTimeTypeMapping : RelationalTypeMapping
+    public class MySqlDateTimeTypeMapping : DateTimeTypeMapping
     {
-        private const string DateTimeFormatConst6 = @"{0:yyyy-MM-dd HH\:mm\:ss.ffffff}";
-        private const string DateTimeFormatConst = @"{0:yyyy-MM-dd HH\:mm\:ss}";
-        private readonly string _storeType;
+        private const string DateTimeFormatConst6 = @"'{0:yyyy-MM-dd HH\:mm\:ss.ffffff}'";
+        private const string DateTimeFormatConst = @"'{0:yyyy-MM-dd HH\:mm\:ss}'";
 
         /// <summary>
-        ///     Initializes a new instance of the <see cref="DateTimeTypeMapping" /> class.
+        ///     This is an internal API that supports the Entity Framework Core infrastructure and not subject to
+        ///     the same compatibility standards as public APIs. It may be changed or removed without notice in
+        ///     any release. You should only use it directly in your code with extreme caution and knowing that
+        ///     doing so can result in application failures when updating to a new Entity Framework Core release.
         /// </summary>
-        /// <param name="storeType"> The name of the database type. </param>
-        /// <param name="dbType"> The <see cref="DbType" /> to be used. </param>
         public MySqlDateTimeTypeMapping(
             [NotNull] string storeType,
-            [CanBeNull] DbType? dbType = null)
-            : base(storeType, typeof(DateTime), dbType, unicode: false, size: null)
+            Type clrType,
+            ValueConverter converter = null,
+            ValueComparer comparer = null,
+            int? precision = null)
+            : this(
+                new RelationalTypeMappingParameters(
+                    new CoreTypeMappingParameters(clrType, converter, comparer),
+                    storeType,
+                    precision == null ? StoreTypePostfix.None : StoreTypePostfix.Precision,
+                    System.Data.DbType.DateTime,
+                    precision: precision))
         {
-            _storeType = storeType;
+        }
+
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
+        protected MySqlDateTimeTypeMapping(RelationalTypeMappingParameters parameters)
+            : base(parameters)
+        {
         }
 
         /// <summary>
         ///     Creates a copy of this mapping.
         /// </summary>
-        /// <param name="storeType"> The name of the database type. </param>
-        /// <param name="size"> The size of data the property is configured to store, or null if no size is configured. </param>
+        /// <param name="parameters"> The parameters for this mapping. </param>
         /// <returns> The newly created mapping. </returns>
-        public override RelationalTypeMapping Clone(string storeType, int? size)
-            => new MySqlDateTimeTypeMapping(
-                storeType,
-                DbType);
+        protected override RelationalTypeMapping Clone(RelationalTypeMappingParameters parameters)
+            => new MySqlDateTimeTypeMapping(parameters);
 
         /// <summary>
         ///     Gets the string format to be used to generate SQL literals of this type.
         /// </summary>
-        protected override string SqlLiteralFormatString => "'" + (_storeType.EndsWith("(6)") ? DateTimeFormatConst6 : DateTimeFormatConst) + "'";
+        protected override string SqlLiteralFormatString
+            => Parameters.Precision == null ? DateTimeFormatConst : DateTimeFormatConst6;
     }
 }

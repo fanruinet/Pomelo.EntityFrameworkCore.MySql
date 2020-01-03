@@ -1,0 +1,16 @@
+﻿<Project>
+  <Import Project="..\Directory.Build.props" />
+
+  <PropertyGroup>
+      <NoWarn>$(NoWarn);EF1001;MSB3277;xUnit1000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Using xunit.core and .assert instead of the main package because compilation fails due to warnings triggered by xunit.analyzers. -->
+    <!-- <PackageReference Include="xunit" Version="$(XunitPackageVersion)" /> -->
+    <PackageReference Include="xunit.core" Version="$(XunitCorePackageVersion)" />
+    <PackageReference Include="xunit.assert" Version="$(XunitAssertPackageVersion)" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="$(XunitRunnerVisualStudioPackageVersion)" />
+    <PackageReference Include="xunit.runner.console" Version="$(XunitRunnerConsolePackageVersion)" />
+  </ItemGroup>
+</Project>

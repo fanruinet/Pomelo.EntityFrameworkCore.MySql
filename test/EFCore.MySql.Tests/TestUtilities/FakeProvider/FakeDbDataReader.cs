@@ -1,5 +1,5 @@
-// Copyright (c) Pomelo Foundation. All rights reserved.
-// Licensed under the MIT. See LICENSE in the project root for license information.
+// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
 using System.Collections;
@@ -8,7 +8,6 @@ using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
 
-//ReSharper disable once CheckNamespace
 namespace Microsoft.EntityFrameworkCore.TestUtilities.FakeProvider
 {
     public class FakeDbDataReader : DbDataReader
@@ -83,30 +82,15 @@ namespace Microsoft.EntityFrameworkCore.TestUtilities.FakeProvider
             return (int)_currentRow[ordinal];
         }
 
-        public override object this[string name]
-        {
-            get { throw new NotImplementedException(); }
-        }
+        public override object this[string name] => throw new NotImplementedException();
 
-        public override object this[int ordinal]
-        {
-            get { throw new NotImplementedException(); }
-        }
+        public override object this[int ordinal] => throw new NotImplementedException();
 
-        public override int Depth
-        {
-            get { throw new NotImplementedException(); }
-        }
+        public override int Depth => throw new NotImplementedException();
 
-        public override bool HasRows
-        {
-            get { throw new NotImplementedException(); }
-        }
+        public override bool HasRows => throw new NotImplementedException();
 
-        public override bool IsClosed
-        {
-            get { throw new NotImplementedException(); }
-        }
+        public override bool IsClosed => throw new NotImplementedException();
 
         public override int RecordsAffected => 0;
 

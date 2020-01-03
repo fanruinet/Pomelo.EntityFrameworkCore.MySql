@@ -1,12 +1,11 @@
-// Copyright (c) Pomelo Foundation. All rights reserved.
-// Licensed under the MIT. See LICENSE in the project root for license information.
+// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore.Storage;
 
-//ReSharper disable once CheckNamespace
 namespace Microsoft.EntityFrameworkCore.TestUtilities.FakeProvider
 {
     public class FakeRelationalDatabaseCreator : IRelationalDatabaseCreator
@@ -67,6 +66,31 @@ namespace Microsoft.EntityFrameworkCore.TestUtilities.FakeProvider
         }
 
         public Task CreateTablesAsync(CancellationToken cancellationToken = new CancellationToken())
+        {
+            throw new NotImplementedException();
+        }
+
+        public string GenerateCreateScript()
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool HasTables()
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<bool> HasTablesAsync(CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+        public bool CanConnect()
+        {
+            throw new NotImplementedException();
+        }
+
+        public Task<bool> CanConnectAsync(CancellationToken cancellationToken = default)
         {
             throw new NotImplementedException();
         }

@@ -7,11 +7,12 @@ using System.Linq;
 using System.Text;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Update;
 
-namespace EFCore.MySql.Update.Internal
+namespace Pomelo.EntityFrameworkCore.MySql.Update.Internal
 {
     /// <summary>
     ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -33,17 +34,9 @@ namespace EFCore.MySql.Update.Internal
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
         public MySqlModificationCommandBatch(
-            [NotNull] IRelationalCommandBuilderFactory commandBuilderFactory,
-            [NotNull] ISqlGenerationHelper sqlGenerationHelper,
-            // ReSharper disable once SuggestBaseTypeForParameter
-            [NotNull] IMySqlUpdateSqlGenerator updateSqlGenerator,
-            [NotNull] IRelationalValueBufferFactoryFactory valueBufferFactoryFactory,
+            [NotNull] ModificationCommandBatchFactoryDependencies dependencies,
             int? maxBatchSize)
-            : base(
-                commandBuilderFactory,
-                sqlGenerationHelper,
-                updateSqlGenerator,
-                valueBufferFactoryFactory)
+            : base(dependencies)
         {
             if (maxBatchSize.HasValue
                 && maxBatchSize.Value <= 0)

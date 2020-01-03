@@ -1,7 +1,7 @@
 // Copyright (c) Pomelo Foundation. All rights reserved.
 // Licensed under the MIT. See LICENSE in the project root for license information.
 
-namespace EFCore.MySql.Metadata.Internal
+namespace Pomelo.EntityFrameworkCore.MySql.Metadata.Internal
 {
     /// <summary>
     ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -28,5 +28,9 @@ namespace EFCore.MySql.Metadata.Internal
         public const string FullTextIndex = Prefix + "FullTextIndex";
 
         public const string SpatialIndex = Prefix + "SpatialIndex";
+
+        public const string CharSet = Prefix + "CharSet";
+
+        public const string Collation = Prefix + "Collation";
     }
 }

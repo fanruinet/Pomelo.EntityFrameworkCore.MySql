@@ -1,54 +1,83 @@
-// Copyright (c) Pomelo Foundation. All rights reserved.
-// Licensed under the MIT. See LICENSE in the project root for license information.
+﻿// Copyright (c) .NET Foundation. All rights reserved.
+// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-using EFCore.MySql.Metadata.Conventions.Internal;
-using EFCore.MySql.Storage.Internal;
 using JetBrains.Annotations;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Internal;
-using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.Utilities;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
+using Pomelo.EntityFrameworkCore.MySql.Metadata.Conventions;
 
-//ReSharper disable once CheckNamespace
 namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
 {
+    /// <summary>
+    ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+    ///     directly from your code. This API may change or be removed in future releases.
+    /// </summary>
     public class MySqlConventionSetBuilder : RelationalConventionSetBuilder
     {
-        private readonly ISqlGenerationHelper _sqlGenerationHelper;
-
+        /// <summary>
+        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
+        ///     directly from your code. This API may change or be removed in future releases.
+        /// </summary>
         public MySqlConventionSetBuilder(
-            [NotNull] RelationalConventionSetBuilderDependencies dependencies,
-            [NotNull] ISqlGenerationHelper sqlGenerationHelper)
-            : base(dependencies)
+            [NotNull] ProviderConventionSetBuilderDependencies dependencies,
+            [NotNull] RelationalConventionSetBuilderDependencies relationalDependencies)
+            : base(dependencies, relationalDependencies)
         {
-            _sqlGenerationHelper = sqlGenerationHelper;
         }
 
-        public override ConventionSet AddConventions(ConventionSet conventionSet)
+
+        /// <summary>
+        ///     Builds and returns the convention set for the current database provider.
+        /// </summary>
+        /// <returns> The convention set for the current database provider. </returns>
+        public override ConventionSet CreateConventionSet()
         {
-            Check.NotNull(conventionSet, nameof(conventionSet));
+            var conventionSet = base.CreateConventionSet();
 
-            base.AddConventions(conventionSet);
+            conventionSet.ModelInitializedConventions.Add(new RelationalMaxIdentifierLengthConvention(64, Dependencies, RelationalDependencies));
 
-            var valueGenerationStrategyConvention = new MySqlValueGenerationStrategyConvention();
-            conventionSet.ModelInitializedConventions.Add(valueGenerationStrategyConvention);
+            var valueGeneratorConvention = new MySqlValueGenerationConvention(Dependencies, RelationalDependencies);
+            ReplaceConvention(conventionSet.EntityTypeBaseTypeChangedConventions, valueGeneratorConvention);
 
-            ReplaceConvention(conventionSet.PropertyAddedConventions, (DatabaseGeneratedAttributeConvention)valueGenerationStrategyConvention);
-            ReplaceConvention(conventionSet.PropertyFieldChangedConventions, (DatabaseGeneratedAttributeConvention)valueGenerationStrategyConvention);
+            ReplaceConvention(conventionSet.EntityTypePrimaryKeyChangedConventions, valueGeneratorConvention);
+
+            ReplaceConvention(conventionSet.ForeignKeyAddedConventions, valueGeneratorConvention);
+
+            ReplaceConvention(conventionSet.ForeignKeyRemovedConventions, valueGeneratorConvention);
+
+            conventionSet.PropertyAnnotationChangedConventions.Add((MySqlValueGenerationConvention)valueGeneratorConvention);
 
             return conventionSet;
         }
 
+        /// <summary>
+        ///     <para>
+        ///         Call this method to build a <see cref="ConventionSet" /> for SQL Server when using
+        ///         the <see cref="ModelBuilder" /> outside of <see cref="DbContext.OnModelCreating" />.
+        ///     </para>
+        ///     <para>
+        ///         Note that it is unusual to use this method.
+        ///         Consider using <see cref="DbContext" /> in the normal way instead.
+        ///     </para>
+        /// </summary>
+        /// <returns> The convention set. </returns>
         public static ConventionSet Build()
         {
-            var typeMapper = new MySqlTypeMapper(new RelationalTypeMapperDependencies());
+            var serviceProvider = new ServiceCollection()
+                .AddEntityFrameworkMySql()
+                .AddDbContext<DbContext>(o => o.UseMySql("Server=."))
+                .BuildServiceProvider();
 
-            return new MySqlConventionSetBuilder(
-                    new RelationalConventionSetBuilderDependencies(typeMapper, null, null),
-                    new MySqlSqlGenerationHelper(new RelationalSqlGenerationHelperDependencies()))
-                .AddConventions(
-                    new CoreConventionSetBuilder(
-                            new CoreConventionSetBuilderDependencies(typeMapper))
-                        .CreateConventionSet());
+            using (var serviceScope = serviceProvider.GetRequiredService<IServiceScopeFactory>().CreateScope())
+            {
+                using (var context = serviceScope.ServiceProvider.GetService<DbContext>())
+                {
+                    return ConventionSet.CreateConventionSet(context);
+                }
+            }
         }
     }
 }

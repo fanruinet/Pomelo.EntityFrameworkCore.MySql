@@ -3,13 +3,15 @@
 
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
+using System.Data;
 using System.Data.Common;
 using System.IO;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace EFCore.MySql.Storage.Internal
+namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 {
     /// <summary>
     /// <see cref="WrappedMySqlDataReader"/> wraps <see cref="DbDataReader" /> and enhances <see cref="GetFieldValue{T}"/> to
@@ -19,6 +21,7 @@ namespace EFCore.MySql.Storage.Internal
     {
         private DbDataReader _reader;
         private bool _disposed;
+        private static readonly ConcurrentDictionary<string, Delegate> _compiledExpressionCache = new ConcurrentDictionary<string, Delegate>();
 
         internal WrappedMySqlDataReader(DbDataReader reader)
         {
@@ -66,25 +69,32 @@ namespace EFCore.MySql.Storage.Internal
         public override bool Read() => GetReader().Read();
         public override Task<bool> ReadAsync(CancellationToken cancellationToken) => GetReader().ReadAsync(cancellationToken);
 
-#if NET45
+
 		public override DataTable GetSchemaTable()
 		{
 			throw new NotSupportedException();
 		}
 
-		public override void Close()
-		{
-			CloseReader();
-		}
-#endif
+        public override void Close()
+        {
+            _reader.Close();
+        }
 
         public override T GetFieldValue<T>(int ordinal)
         {
             try
             {
-	            // try normal casting
-	            if (typeof(T) == typeof(char))
-		            return (T) Convert.ChangeType(Convert.ToChar(GetReader().GetFieldValue<byte>(ordinal)), typeof(T));
+                // try normal casting
+                if (typeof(T) == typeof(char))
+                {
+                    return (T)Convert.ChangeType(Convert.ToChar(GetReader().GetFieldValue<byte>(ordinal)), typeof(T));
+                }
+                // for all JsonObject types, use explicit conversion with reflection
+                else if (IsJsonObjectType(typeof(T)))
+                {
+                    return ConvertWithReflection<T>(ordinal);
+                }
+
                 return GetReader().GetFieldValue<T>(ordinal);
             }
             catch (InvalidCastException e)
@@ -93,15 +103,23 @@ namespace EFCore.MySql.Storage.Internal
             }
         }
 
+        private bool IsJsonObjectType(Type type)
+        {
+            return type == typeof(JsonObject) || type.IsGenericType && type.GetGenericTypeDefinition() == typeof(JsonObject<>);
+        }
+
+        private T ConvertWithReflection<T>(int ordinal)
+        {
+            var run = GetCompiledConversionExpression(typeof(T));
+            return (T)run.DynamicInvoke(GetReader().GetValue(ordinal));
+        }
+
         private T ConvertWithReflection<T>(int ordinal, InvalidCastException e)
         {
             try
             {
-                // try casting using reflection; needed for json
-                var dataParam = Expression.Parameter(typeof(string), "data");
-                var body = Expression.Block(Expression.Convert(dataParam, typeof(T)));
-                var run = Expression.Lambda(body, dataParam).Compile();
-                return (T) run.DynamicInvoke(GetReader().GetValue(ordinal));
+                // for unlisted types, try casting using reflection
+                return ConvertWithReflection<T>(ordinal);
             }
             catch (Exception)
             {
@@ -110,21 +128,26 @@ namespace EFCore.MySql.Storage.Internal
             }
         }
 
-        private void CloseReader()
+        private Delegate GetCompiledConversionExpression(Type reflectionType)
         {
-            if (_reader != null)
+            var typeFullName = reflectionType.FullName;
+            return _compiledExpressionCache.GetOrAdd(typeFullName, _ =>
             {
-                // dispose the underlying MySQL data reader
-                _reader.Dispose();
-                _reader = null;
-            }
+                var dataParam = Expression.Parameter(typeof(string), "data");
+                var body = Expression.Block(Expression.Convert(dataParam, reflectionType));
+                return Expression.Lambda(body, dataParam).Compile();
+            });
         }
 
         protected override void Dispose(bool disposing)
         {
             if (disposing && !_disposed)
             {
-                CloseReader();
+                if (!_disposed)
+                {
+                    // dispose the underlying MySQL data reader
+                    _reader.Dispose();
+                }
                 base.Dispose(disposing);
                 _disposed = true;
             }
@@ -132,11 +155,6 @@ namespace EFCore.MySql.Storage.Internal
 
         private DbDataReader GetReader()
         {
-            if (_reader == null)
-            {
-                throw new ObjectDisposedException(nameof(WrappedMySqlDataReader));
-            }
-
             return _reader;
         }
     }

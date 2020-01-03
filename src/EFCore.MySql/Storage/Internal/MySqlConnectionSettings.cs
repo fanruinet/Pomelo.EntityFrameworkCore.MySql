@@ -1,84 +1,75 @@
 // Copyright (c) Pomelo Foundation. All rights reserved.
 // Licensed under the MIT. See LICENSE in the project root for license information.
 
-using System.Collections.Concurrent;
-using System.Data;
 using System.Data.Common;
 using MySql.Data.MySqlClient;
 
-namespace EFCore.MySql.Storage.Internal
+namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 {
     public class MySqlConnectionSettings
     {
-        private static readonly ConcurrentDictionary<string, MySqlConnectionSettings> Settings
-            = new ConcurrentDictionary<string, MySqlConnectionSettings>();
-
-        private static MySqlConnectionStringBuilder _settingsCsb(MySqlConnectionStringBuilder csb)
+        public MySqlConnectionSettings()
         {
-            return new MySqlConnectionStringBuilder
-            {
-                Server = csb.Server,
-                Port = csb.Port,
-                OldGuids = csb.OldGuids,
-                TreatTinyAsBoolean = csb.TreatTinyAsBoolean,
-            };
         }
 
-        public static MySqlConnectionSettings GetSettings(string connectionString)
+        public MySqlConnectionSettings(DbConnection connection)
+            : this(connection.ConnectionString)
+        {
+        }
+
+        public MySqlConnectionSettings(string connectionString)
         {
             var csb = new MySqlConnectionStringBuilder(connectionString);
-            var settingsCsb = _settingsCsb(csb);
-            return Settings.GetOrAdd(settingsCsb.ConnectionString, key =>
+
+            if (csb.GuidFormat == MySqlGuidFormat.Default)
             {
-                csb.Database = "";
-                csb.Pooling = false;
-                string serverVersion;
-                using (var schemalessConnection = new MySqlConnection(csb.ConnectionString))
-                {
-                    schemalessConnection.Open();
-                    serverVersion = schemalessConnection.ServerVersion;
-                }
-                var version = new ServerVersion(serverVersion);
-                return new MySqlConnectionSettings(settingsCsb, version);
-            });
-        }
-
-        public static MySqlConnectionSettings GetSettings(DbConnection connection)
-        {
-            var csb = new MySqlConnectionStringBuilder(connection.ConnectionString);
-            var settingsCsb = _settingsCsb(csb);
-            return Settings.GetOrAdd(settingsCsb.ConnectionString, key =>
+                GuidFormat = csb.OldGuids
+                    ? MySqlGuidFormat.LittleEndianBinary16
+                    : MySqlGuidFormat.Char36;
+            }
+            else
             {
-                var opened = false;
-                if (connection.State == ConnectionState.Closed)
-                {
-                    connection.Open();
-                    opened = true;
-                }
-                try
-                {
-                    var version = new ServerVersion(connection.ServerVersion);
-                    var connectionSettings = new MySqlConnectionSettings(settingsCsb, version);
-                    return connectionSettings;
-                }
-                finally
-                {
-                    if (opened)
-                        connection.Close();
-                }
-            });
+                GuidFormat = csb.GuidFormat;
+            }
+
+            TreatTinyAsBoolean = csb.TreatTinyAsBoolean;
         }
 
-        internal MySqlConnectionSettings(MySqlConnectionStringBuilder settingsCsb, ServerVersion serverVersion)
+        public virtual MySqlGuidFormat GuidFormat { get; }
+        public virtual bool TreatTinyAsBoolean { get; }
+
+        protected bool Equals(MySqlConnectionSettings other)
         {
-            // Settings from the connection string
-            OldGuids = settingsCsb.OldGuids;
-            TreatTinyAsBoolean = settingsCsb.TreatTinyAsBoolean;
-            ServerVersion = serverVersion;
+            return GuidFormat == other.GuidFormat &&
+                   TreatTinyAsBoolean == other.TreatTinyAsBoolean;
         }
 
-        public readonly bool OldGuids;
-        public readonly bool TreatTinyAsBoolean;
-        public readonly ServerVersion ServerVersion;
+        public override bool Equals(object obj)
+        {
+            if (ReferenceEquals(null, obj))
+            {
+                return false;
+            }
+
+            if (ReferenceEquals(this, obj))
+            {
+                return true;
+            }
+
+            if (obj.GetType() != this.GetType())
+            {
+                return false;
+            }
+
+            return Equals((MySqlConnectionSettings)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return ((int)GuidFormat * 397) ^ TreatTinyAsBoolean.GetHashCode();
+            }
+        }
     }
 }
