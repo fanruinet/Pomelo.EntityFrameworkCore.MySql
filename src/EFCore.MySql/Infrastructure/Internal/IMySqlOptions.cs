@@ -1,6 +1,7 @@
 // Copyright (c) Pomelo Foundation. All rights reserved.
 // Licensed under the MIT. See LICENSE in the project root for license information.
 
+using Microsoft.EntityFrameworkCore;
 using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Pomelo.EntityFrameworkCore.MySql.Internal;
@@ -18,5 +19,8 @@ namespace Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal
         bool NoBackslashEscapes { get; }
         bool ReplaceLineBreaksWithCharFunction { get; }
         MySqlDefaultDataTypeMappings DefaultDataTypeMappings { get; }
+        MySqlSchemaNameTranslator SchemaNameTranslator { get; }
+        bool IndexOptimizedBooleanColumns { get; }
+        MySqlJsonChangeTrackingOptions JsonChangeTrackingOptions { get; }
     }
 }

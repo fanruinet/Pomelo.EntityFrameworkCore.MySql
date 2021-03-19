@@ -1,10 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Globalization;
-using System.Linq;
-using System.Text;
-using JetBrains.Annotations;
+﻿// Copyright (c) Pomelo Foundation. All rights reserved.
+// Licensed under the MIT. See LICENSE in the project root for license information.
 
+using System;
+using JetBrains.Annotations;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+
+// ReSharper disable once CheckNamespace
 namespace Microsoft.EntityFrameworkCore
 {
     /// <summary>
@@ -25,7 +26,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime startDate,
             DateTime endDate)
-            => endDate.Year - startDate.Year;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffYear)));
 
         /// <summary>
         ///     Counts the number of year boundaries crossed between the startDate and endDate.
@@ -39,9 +40,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime? startDate,
             DateTime? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffYear(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffYear)));
 
         /// <summary>
         ///     Counts the number of year boundaries crossed between the startDate and endDate.
@@ -55,7 +54,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset startDate,
             DateTimeOffset endDate)
-            => DateDiffYear(_, startDate.UtcDateTime, endDate.UtcDateTime);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffYear)));
 
         /// <summary>
         ///     Counts the number of year boundaries crossed between the startDate and endDate.
@@ -69,9 +68,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffYear(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffYear)));
 
         /// <summary>
         ///     Counts the number of month boundaries crossed between the startDate and endDate.
@@ -85,7 +82,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime startDate,
             DateTime endDate)
-            => 12 * (endDate.Year - startDate.Year) + endDate.Month - startDate.Month;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMonth)));
 
         /// <summary>
         ///     Counts the number of month boundaries crossed between the startDate and endDate.
@@ -99,9 +96,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime? startDate,
             DateTime? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffMonth(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMonth)));
 
         /// <summary>
         ///     Counts the number of month boundaries crossed between the startDate and endDate.
@@ -115,7 +110,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset startDate,
             DateTimeOffset endDate)
-            => DateDiffMonth(_, startDate.UtcDateTime, endDate.UtcDateTime);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMonth)));
 
         /// <summary>
         ///     Counts the number of month boundaries crossed between the startDate and endDate.
@@ -129,9 +124,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffMonth(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMonth)));
 
         /// <summary>
         ///     Counts the number of day boundaries crossed between the startDate and endDate.
@@ -145,7 +138,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime startDate,
             DateTime endDate)
-            => (endDate.Date - startDate.Date).Days;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffDay)));
 
         /// <summary>
         ///     Counts the number of day boundaries crossed between the startDate and endDate.
@@ -159,9 +152,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime? startDate,
             DateTime? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffDay(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffDay)));
 
         /// <summary>
         ///     Counts the number of day boundaries crossed between the startDate and endDate.
@@ -175,7 +166,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset startDate,
             DateTimeOffset endDate)
-            => DateDiffDay(_, startDate.UtcDateTime, endDate.UtcDateTime);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffDay)));
 
         /// <summary>
         ///     Counts the number of day boundaries crossed between the startDate and endDate.
@@ -189,9 +180,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffDay(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffDay)));
 
         /// <summary>
         ///     Counts the number of hour boundaries crossed between the startDate and endDate.
@@ -205,12 +194,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime startDate,
             DateTime endDate)
-        {
-            checked
-            {
-                return DateDiffDay(_, startDate, endDate) * 24 + endDate.Hour - startDate.Hour;
-            }
-        }
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffHour)));
 
         /// <summary>
         ///     Counts the number of hour boundaries crossed between the startDate and endDate.
@@ -224,9 +208,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime? startDate,
             DateTime? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffHour(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffHour)));
 
         /// <summary>
         ///     Counts the number of hour boundaries crossed between the startDate and endDate.
@@ -240,7 +222,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset startDate,
             DateTimeOffset endDate)
-            => DateDiffHour(_, startDate.UtcDateTime, endDate.UtcDateTime);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffHour)));
 
         /// <summary>
         ///     Counts the number of hour boundaries crossed between the startDate and endDate.
@@ -254,9 +236,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffHour(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffHour)));
 
         /// <summary>
         ///     Counts the number of minute boundaries crossed between the startDate and endDate.
@@ -270,12 +250,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime startDate,
             DateTime endDate)
-        {
-            checked
-            {
-                return DateDiffHour(_, startDate, endDate) * 60 + endDate.Minute - startDate.Minute;
-            }
-        }
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMinute)));
 
         /// <summary>
         ///     Counts the number of minute boundaries crossed between the startDate and endDate.
@@ -289,9 +264,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime? startDate,
             DateTime? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffMinute(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMinute)));
 
         /// <summary>
         ///     Counts the number of minute boundaries crossed between the startDate and endDate.
@@ -305,7 +278,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset startDate,
             DateTimeOffset endDate)
-            => DateDiffMinute(_, startDate.UtcDateTime, endDate.UtcDateTime);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMinute)));
 
         /// <summary>
         ///     Counts the number of minute boundaries crossed between the startDate and endDate.
@@ -319,9 +292,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffMinute(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMinute)));
 
         /// <summary>
         ///     Counts the number of second boundaries crossed between the startDate and endDate.
@@ -335,12 +306,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime startDate,
             DateTime endDate)
-        {
-            checked
-            {
-                return DateDiffMinute(_, startDate, endDate) * 60 + endDate.Second - startDate.Second;
-            }
-        }
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffSecond)));
 
         /// <summary>
         ///     Counts the number of second boundaries crossed between the startDate and endDate.
@@ -354,9 +320,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime? startDate,
             DateTime? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffSecond(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffSecond)));
 
         /// <summary>
         ///     Counts the number of second boundaries crossed between the startDate and endDate.
@@ -370,7 +334,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset startDate,
             DateTimeOffset endDate)
-            => DateDiffSecond(_, startDate.UtcDateTime, endDate.UtcDateTime);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffSecond)));
 
         /// <summary>
         ///     Counts the number of second boundaries crossed between the startDate and endDate.
@@ -384,9 +348,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffSecond(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffSecond)));
 
         /// <summary>
         ///     Counts the number of microsecond boundaries crossed between the startDate and endDate.
@@ -400,12 +362,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime startDate,
             DateTime endDate)
-        {
-            checked
-            {
-                return (int)((endDate.Ticks - startDate.Ticks) / 10);
-            }
-        }
+         => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMicrosecond)));
 
         /// <summary>
         ///     Counts the number of microsecond boundaries crossed between the startDate and endDate.
@@ -419,9 +376,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTime? startDate,
             DateTime? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffMicrosecond(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMicrosecond)));
 
         /// <summary>
         ///     Counts the number of microsecond boundaries crossed between the startDate and endDate.
@@ -435,7 +390,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset startDate,
             DateTimeOffset endDate)
-            => DateDiffMicrosecond(_, startDate.UtcDateTime, endDate.UtcDateTime);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMicrosecond)));
 
         /// <summary>
         ///     Counts the number of microsecond boundaries crossed between the startDate and endDate.
@@ -449,9 +404,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             DateTimeOffset? startDate,
             DateTimeOffset? endDate)
-            => (startDate.HasValue && endDate.HasValue)
-                ? (int?)DateDiffMicrosecond(_, startDate.Value, endDate.Value)
-                : null;
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(DateDiffMicrosecond)));
 
         /// <summary>
         ///     <para>
@@ -473,7 +426,7 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] this DbFunctions _,
             [CanBeNull] T matchExpression,
             [CanBeNull] string pattern)
-            => LikeCore(matchExpression, pattern, null);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(Like)));
 
         /// <summary>
         ///     <para>
@@ -483,8 +436,7 @@ namespace Microsoft.EntityFrameworkCore
         ///     <para>
         ///         Note that if this function is translated into SQL, then the semantics of the comparison will
         ///         depend on the database configuration. In particular, it may be either case-sensitive or
-        ///         case-insensitive. If this function is evaluated on the client, then it will always use
-        ///         a case-insensitive comparison.
+        ///         case-insensitive.
         ///     </para>
         /// </summary>
         /// <param name="_">The DbFunctions instance.</param>
@@ -500,22 +452,83 @@ namespace Microsoft.EntityFrameworkCore
             [CanBeNull] T matchExpression,
             [CanBeNull] string pattern,
             [CanBeNull] string escapeCharacter)
-            => LikeCore(matchExpression, pattern, escapeCharacter);
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(Like)));
 
-        private static bool LikeCore<T>(T matchExpression, string pattern, string escapeCharacter)
-        {
-            if (matchExpression is IConvertible convertible)
-            {
-                return EF.Functions.Like(convertible.ToString(CultureInfo.InvariantCulture), pattern, escapeCharacter);
-            }
+        /// <summary>
+        ///     <para>
+        ///         An implementation of the SQL MATCH operation for Full Text search.
+        ///     </para>
+        ///     <para>
+        ///         The semantics of the comparison will depend on the database configuration.
+        ///         In particular, it may be either case-sensitive or case-insensitive.
+        ///     </para>
+        /// </summary>
+        /// <param name="_">The DbFunctions instance.</param>
+        /// <param name="property">The property of entity that is to be matched.</param>
+        /// <param name="pattern">The pattern against which Full Text search is performed</param>
+        /// <param name="searchMode">Mode in which search is performed</param>
+        /// <returns>true if there is a match.</returns>
+        /// <exception cref="InvalidOperationException">Throws when query switched to client-evaluation.</exception>
+        public static bool Match(
+            [CanBeNull] this DbFunctions _,
+            [CanBeNull] string property,
+            [CanBeNull] string pattern,
+            MySqlMatchSearchMode searchMode)
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(Match)));
 
-            if (matchExpression is byte[] byteArray)
-            {
-                var value = BitConverter.ToString(byteArray);
-                return EF.Functions.Like(value.Replace("-", string.Empty), pattern, escapeCharacter);
-            }
+        /// <summary>
+        ///     <para>
+        ///         An implementation of the SQL MATCH operation for Full Text search.
+        ///     </para>
+        ///     <para>
+        ///         The semantics of the comparison will depend on the database configuration.
+        ///         In particular, it may be either case-sensitive or case-insensitive.
+        ///     </para>
+        /// </summary>
+        /// <param name="_">The DbFunctions instance.</param>
+        /// <param name="properties">The propertys of entity that is to be matched.</param>
+        /// <param name="pattern">The pattern against which Full Text search is performed</param>
+        /// <param name="searchMode">Mode in which search is performed</param>
+        /// <returns>true if there is a match.</returns>
+        /// <exception cref="InvalidOperationException">Throws when query switched to client-evaluation.</exception>
+        public static bool Match(
+            [CanBeNull] this DbFunctions _,
+            [NotNull] string[] properties,
+            [CanBeNull] string pattern,
+            MySqlMatchSearchMode searchMode)
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(Match)));
 
-            return false;
-        }
+        /// <summary>
+        ///     <para>
+        ///         For a string argument `value`, Hex() returns a hexadecimal string representation of `value` where
+        ///         each byte of each character in `value` is converted to two hexadecimal digits.
+        ///     </para>
+        ///     <para>
+        ///         For a numeric argument `value`, Hex() returns a hexadecimal string representation of `value`
+        ///         treated as a `Int64` (BIGINT) number.
+        ///     </para>
+        ///     <para>
+        ///
+        ///     </para>
+        /// </summary>
+        /// <param name="_">The DbFunctions instance.</param>
+        /// <param name="value">The string or number to convert to a hexadecimal string.</param>
+        /// <returns>The hexadecimal string or `null`.</returns>
+        public static string Hex<T>(
+            [CanBeNull] this DbFunctions _,
+            [CanBeNull] T value)
+         => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(Hex)));
+
+        /// <summary>
+        /// For a string argument `value`, Unhex() interprets each pair of characters in the argument as a hexadecimal
+        /// number and converts it to the byte represented by the number.
+        /// </summary>
+        /// <param name="_">The DbFunctions instance.</param>
+        /// <param name="value">The hexadecimal string to convert to a character string.</param>
+        /// <returns>The string or `null`.</returns>
+        public static string Unhex(
+            [CanBeNull] this DbFunctions _,
+            [CanBeNull] string value)
+            => throw new InvalidOperationException(CoreStrings.FunctionOnClient(nameof(Hex)));
     }
 }

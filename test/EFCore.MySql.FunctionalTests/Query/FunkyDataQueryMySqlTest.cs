@@ -11,13 +11,23 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.Query
         public FunkyDataQueryMySqlTest(FunkyDataQueryMySqlFixture fixture)
             : base(fixture)
         {
+            ClearLog();
+            //Fixture.TestSqlLoggerFactory.SetTestOutputHelper(testOutputHelper);
         }
+
+        protected override void ClearLog()
+            => Fixture.TestSqlLoggerFactory.Clear();
+
+        private void AssertSql(params string[] expected)
+            => Fixture.TestSqlLoggerFactory.AssertBaseline(expected);
 
         public class FunkyDataQueryMySqlFixture : FunkyDataQueryFixtureBase
         {
-            public TestSqlLoggerFactory TestSqlLoggerFactory => (TestSqlLoggerFactory)ServiceProvider.GetRequiredService<ILoggerFactory>();
+            public TestSqlLoggerFactory TestSqlLoggerFactory
+                => (TestSqlLoggerFactory)ServiceProvider.GetRequiredService<ILoggerFactory>();
 
-            protected override ITestStoreFactory TestStoreFactory => MySqlTestStoreFactory.Instance;
+            protected override ITestStoreFactory TestStoreFactory
+                => MySqlTestStoreFactory.Instance;
         }
     }
 }

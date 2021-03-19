@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.TestUtilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
 using Pomelo.EntityFrameworkCore.MySql.Storage;
-using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Tests;
 
 //ReSharper disable once CheckNamespace
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities
@@ -22,14 +22,17 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities
         public override IServiceCollection AddProviderServices(IServiceCollection services)
             => services.AddEntityFrameworkMySql();
 
-        protected override void UseProviderOptions(DbContextOptionsBuilder optionsBuilder)
-            => optionsBuilder.UseMySql("Database=DummyDatabase");
+        public override void UseProviderOptions(DbContextOptionsBuilder optionsBuilder)
+            => optionsBuilder.UseMySql("Database=DummyDatabase", AppConfig.ServerVersion);
 
         public IServiceProvider CreateContextServices(ServerVersion serverVersion)
             => ((IInfrastructure<IServiceProvider>)new DbContext(CreateOptions(serverVersion))).Instance;
 
         public IServiceProvider CreateContextServices(CharSetBehavior charSetBehavior, CharSet charSet)
             => ((IInfrastructure<IServiceProvider>)new DbContext(CreateOptions(charSetBehavior, charSet))).Instance;
+
+        public IServiceProvider CreateContextServices(Action<MySqlDbContextOptionsBuilder> builder)
+            => ((IInfrastructure<IServiceProvider>)new DbContext(CreateOptions(builder))).Instance;
 
         public ModelBuilder CreateConventionBuilder(IServiceProvider contextServices)
         {
@@ -40,21 +43,16 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities
         }
 
         public DbContextOptions CreateOptions(ServerVersion serverVersion)
-        {
-            var optionsBuilder = new DbContextOptionsBuilder();
-            optionsBuilder.UseMySql("Database=DummyDatabase", b => b.ServerVersion(serverVersion));
-
-            return optionsBuilder.Options;
-        }
+            => CreateOptions(b => {});
 
         public DbContextOptions CreateOptions(CharSetBehavior charSetBehavior, CharSet charSet)
-        {
-            var optionsBuilder = new DbContextOptionsBuilder();
-            optionsBuilder.UseMySql("Database=DummyDatabase", b => b
-                .CharSetBehavior(charSetBehavior)
-                .CharSet(charSet));
+            => CreateOptions(
+                b => b.CharSetBehavior(charSetBehavior)
+                    .CharSet(charSet));
 
-            return optionsBuilder.Options;
-        }
+        public DbContextOptions CreateOptions(Action<MySqlDbContextOptionsBuilder> builder)
+            => new DbContextOptionsBuilder()
+                .UseMySql("Database=DummyDatabase", AppConfig.ServerVersion, builder)
+                .Options;
     }
 }

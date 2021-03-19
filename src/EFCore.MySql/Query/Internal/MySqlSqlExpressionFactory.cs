@@ -1,10 +1,18 @@
-﻿using System;
+﻿// Copyright (c) Pomelo Foundation. All rights reserved.
+// Licensed under the MIT. See LICENSE in the project root for license information.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using JetBrains.Annotations;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Query;
 using Microsoft.EntityFrameworkCore.Query.SqlExpressions;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Utilities;
 using Pomelo.EntityFrameworkCore.MySql.Query.Expressions.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Utilities;
 
 namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
 {
@@ -20,10 +28,138 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
             _boolTypeMapping = _typeMappingSource.FindMapping(typeof(bool));
         }
 
+        public virtual RelationalTypeMapping FindMapping(
+            [NotNull] Type type,
+            [CanBeNull] string storeTypeName,
+            bool keyOrIndex = false,
+            bool? unicode = null,
+            int? size = null,
+            bool? rowVersion = null,
+            bool? fixedLength = null,
+            int? precision = null,
+            int? scale = null)
+            => _typeMappingSource.FindMapping(
+                type,
+                storeTypeName,
+                keyOrIndex,
+                unicode,
+                size,
+                rowVersion,
+                fixedLength,
+                precision,
+                scale);
+
         #region Expression factory methods
+
+        /// <summary>
+        /// Use for any function that could return `NULL` for *any* reason.
+        /// </summary>
+        /// <param name="name">The SQL name of the function.</param>
+        /// <param name="arguments">The arguments of the function.</param>
+        /// <param name="returnType">The CLR return type of the function.</param>
+        /// <param name="onlyNullWhenAnyNullPropagatingArgumentIsNull">
+        /// Set to `false` if the function can return `NULL` even if all of the arguments are not `NULL`. This will disable null-related
+        /// optimizations by EF Core.
+        /// </param>
+        /// <remarks>See https://github.com/dotnet/efcore/issues/23042</remarks>
+        /// <returns>The function expression.</returns>
+        public virtual SqlFunctionExpression NullableFunction(
+            string name,
+            IEnumerable<SqlExpression> arguments,
+            Type returnType,
+            bool onlyNullWhenAnyNullPropagatingArgumentIsNull)
+            => NullableFunction(name, arguments, returnType, null, onlyNullWhenAnyNullPropagatingArgumentIsNull);
+
+        /// <summary>
+        /// Use for any function that could return `NULL` for *any* reason.
+        /// </summary>
+        /// <param name="name">The SQL name of the function.</param>
+        /// <param name="arguments">The arguments of the function.</param>
+        /// <param name="returnType">The CLR return type of the function.</param>
+        /// <param name="typeMapping">The optional type mapping of the function.</param>
+        /// <param name="onlyNullWhenAnyNullPropagatingArgumentIsNull">
+        ///     Set to `false` if the function can return `NULL` even if all of the arguments are not `NULL`. This will disable null-related
+        ///     optimizations by EF Core.
+        /// </param>
+        /// <param name="argumentsPropagateNullability">
+        ///     The optional nullability array of the function.
+        ///     If omited and <paramref name="onlyNullWhenAnyNullPropagatingArgumentIsNull"/> is
+        ///     `true` (the default), all parameters will propagate nullability (meaning if any parameter is `NULL`, the function will
+        ///     automatically return `NULL` as well).
+        ///     If <paramref name="onlyNullWhenAnyNullPropagatingArgumentIsNull"/> is explicitly set to `false`, the
+        ///     null propagating capabilities of the arguments don't matter at all anymore, because the function will never be optimized by
+        ///     EF Core in the first place.
+        /// </param>
+        /// <remarks>See https://github.com/dotnet/efcore/issues/23042</remarks>
+        /// <returns>The function expression.</returns>
+        public virtual SqlFunctionExpression NullableFunction(
+            string name,
+            IEnumerable<SqlExpression> arguments,
+            Type returnType,
+            RelationalTypeMapping typeMapping = null,
+            bool onlyNullWhenAnyNullPropagatingArgumentIsNull = true,
+            IEnumerable<bool> argumentsPropagateNullability = null)
+        {
+            Check.NotEmpty(name, nameof(name));
+            Check.NotNull(arguments, nameof(arguments));
+            Check.NotNull(returnType, nameof(returnType));
+
+            var typeMappedArguments = new List<SqlExpression>();
+
+            foreach (var argument in arguments)
+            {
+                typeMappedArguments.Add(ApplyDefaultTypeMapping(argument));
+            }
+
+            return new SqlFunctionExpression(
+                name,
+                typeMappedArguments,
+                true,
+                onlyNullWhenAnyNullPropagatingArgumentIsNull
+                    ? (argumentsPropagateNullability ?? Statics.GetTrueValues(typeMappedArguments.Count))
+                    : Statics.GetFalseValues(typeMappedArguments.Count),
+                returnType,
+                typeMapping);
+        }
+
+        /// <summary>
+        /// Use for any function that will never return `NULL`.
+        /// </summary>
+        /// <param name="name">The SQL name of the function.</param>
+        /// <param name="arguments">The arguments of the function.</param>
+        /// <param name="returnType">The CLR return type of the function.</param>
+        /// <param name="typeMapping">The optional type mapping of the function.</param>
+        /// <remarks>See https://github.com/dotnet/efcore/issues/23042</remarks>
+        /// <returns>The function expression.</returns>
+        public virtual SqlFunctionExpression NonNullableFunction(
+            string name,
+            IEnumerable<SqlExpression> arguments,
+            Type returnType,
+            RelationalTypeMapping typeMapping = null)
+        {
+            Check.NotEmpty(name, nameof(name));
+            Check.NotNull(arguments, nameof(arguments));
+            Check.NotNull(returnType, nameof(returnType));
+
+            var typeMappedArguments = new List<SqlExpression>();
+
+            foreach (var argument in arguments)
+            {
+                typeMappedArguments.Add(ApplyDefaultTypeMapping(argument));
+            }
+
+            return new SqlFunctionExpression(
+                name,
+                typeMappedArguments,
+                false,
+                Statics.GetFalseValues(typeMappedArguments.Count),
+                returnType,
+                typeMapping);
+        }
 
         public MySqlComplexFunctionArgumentExpression ComplexFunctionArgument(
             IEnumerable<SqlExpression> argumentParts,
+            string delimiter,
             Type argumentType,
             RelationalTypeMapping typeMapping = null)
         {
@@ -34,9 +170,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
                 typeMappedArgumentParts.Add(ApplyDefaultTypeMapping(argument));
             }
 
-            return new MySqlComplexFunctionArgumentExpression(
-                typeMappedArgumentParts,
-                argumentType,
+            return (MySqlComplexFunctionArgumentExpression)ApplyTypeMapping(
+                new MySqlComplexFunctionArgumentExpression(
+                    typeMappedArgumentParts,
+                    delimiter,
+                    argumentType,
+                    typeMapping),
                 typeMapping);
         }
 
@@ -70,6 +209,16 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
                 right,
                 typeMapping);
 
+        public virtual MySqlBinaryExpression NonOptimizedEqual(
+            SqlExpression left,
+            SqlExpression right,
+            RelationalTypeMapping typeMapping = null)
+            => MakeBinary(
+                MySqlBinaryExpressionOperatorType.NonOptimizedEqual,
+                left,
+                right,
+                typeMapping);
+
         #endregion Expression factory methods
 
         public virtual MySqlBinaryExpression MakeBinary(
@@ -90,6 +239,44 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
                 typeMapping);
         }
 
+        public virtual MySqlMatchExpression MakeMatch(
+            SqlExpression match,
+            SqlExpression against,
+            MySqlMatchSearchMode searchMode)
+        {
+            return (MySqlMatchExpression)ApplyDefaultTypeMapping(
+                new MySqlMatchExpression(
+                    match,
+                    against,
+                    searchMode,
+                    null));
+        }
+
+        public virtual MySqlJsonTraversalExpression JsonTraversal(
+            [NotNull] SqlExpression expression,
+            bool returnsText,
+            [NotNull] Type type,
+            [CanBeNull] RelationalTypeMapping typeMapping = null)
+            => new MySqlJsonTraversalExpression(
+                ApplyDefaultTypeMapping(expression),
+                returnsText,
+                type,
+                typeMapping);
+
+        public virtual MySqlJsonArrayIndexExpression JsonArrayIndex(
+            [NotNull] SqlExpression expression)
+            => JsonArrayIndex(expression, typeof(int));
+
+        public virtual MySqlJsonArrayIndexExpression JsonArrayIndex(
+            [NotNull] SqlExpression expression,
+            [NotNull] Type type,
+            [CanBeNull] RelationalTypeMapping typeMapping = null)
+            => (MySqlJsonArrayIndexExpression)ApplyDefaultTypeMapping(
+                new MySqlJsonArrayIndexExpression(
+                    ApplyDefaultTypeMapping(expression),
+                    type,
+                    typeMapping));
+
         public override SqlExpression ApplyTypeMapping(SqlExpression sqlExpression, RelationalTypeMapping typeMapping)
         {
             if (sqlExpression == null
@@ -98,32 +285,75 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
                 return sqlExpression;
             }
 
-            switch (sqlExpression)
+            return ApplyNewTypeMapping(sqlExpression, typeMapping);
+        }
+
+        private SqlExpression ApplyNewTypeMapping(SqlExpression sqlExpression, RelationalTypeMapping typeMapping)
+        {
+            return sqlExpression switch
             {
-                case MySqlComplexFunctionArgumentExpression e:
-                    return ApplyTypeMappingOnComplexFunctionArgument(e);
+                MySqlComplexFunctionArgumentExpression e => ApplyTypeMappingOnComplexFunctionArgument(e),
+                MySqlCollateExpression e => ApplyTypeMappingOnCollate(e),
+                MySqlRegexpExpression e => ApplyTypeMappingOnRegexp(e),
+                MySqlBinaryExpression e => ApplyTypeMappingOnMySqlBinary(e, typeMapping),
+                MySqlMatchExpression e => ApplyTypeMappingOnMatch(e),
+                MySqlJsonArrayIndexExpression e => e.ApplyTypeMapping(typeMapping),
+                SqlBinaryExpression e => ApplyTypeMappingOnSqlBinary(e, typeMapping),
+                _ => base.ApplyTypeMapping(sqlExpression, typeMapping)
+            };
+        }
 
-                case MySqlCollateExpression e:
-                    return ApplyTypeMappingOnCollate(e);
+        private SqlBinaryExpression ApplyTypeMappingOnSqlBinary(SqlBinaryExpression sqlBinaryExpression, RelationalTypeMapping typeMapping)
+        {
+            var left = sqlBinaryExpression.Left;
+            var right = sqlBinaryExpression.Right;
 
-                case MySqlRegexpExpression e:
-                    return ApplyTypeMappingOnRegexp(e);
+            var newSqlBinaryExpression = (SqlBinaryExpression)base.ApplyTypeMapping(sqlBinaryExpression, typeMapping);
 
-                case MySqlBinaryExpression e:
-                    return ApplyTypeMappingOnMySqlBinary(e, typeMapping);
-
-                default:
-                    return base.ApplyTypeMapping(sqlExpression, typeMapping);
+            // Handle the special case, that a JSON value is compared to a string (e.g. when used together with
+            // JSON_EXTRACT()).
+            // The string argument should not be interpreted as a JSON value, which it normally would due to inference
+            // if its type mapping hasn't been explicitly set before, but just as a string.
+            if (newSqlBinaryExpression.Left.TypeMapping is MySqlJsonTypeMapping newLeftTypeMapping &&
+                newLeftTypeMapping.ClrType == typeof(string) &&
+                right.TypeMapping is null &&
+                right.Type == typeof(string))
+            {
+                newSqlBinaryExpression = new SqlBinaryExpression(
+                    sqlBinaryExpression.OperatorType,
+                    ApplyTypeMapping(left, newLeftTypeMapping),
+                    ApplyTypeMapping(right, _typeMappingSource.FindMapping(right.Type)),
+                    newSqlBinaryExpression.Type,
+                    newSqlBinaryExpression.TypeMapping);
             }
+            else if (newSqlBinaryExpression.Right.TypeMapping is MySqlJsonTypeMapping newRightTypeMapping &&
+                     newRightTypeMapping.ClrType == typeof(string) &&
+                     left.TypeMapping is null &&
+                     left.Type == typeof(string))
+            {
+                newSqlBinaryExpression = new SqlBinaryExpression(
+                    sqlBinaryExpression.OperatorType,
+                    ApplyTypeMapping(left, _typeMappingSource.FindMapping(left.Type)),
+                    ApplyTypeMapping(right, newRightTypeMapping),
+                    newSqlBinaryExpression.Type,
+                    newSqlBinaryExpression.TypeMapping);
+            }
+
+            return newSqlBinaryExpression;
         }
 
         private MySqlComplexFunctionArgumentExpression ApplyTypeMappingOnComplexFunctionArgument(MySqlComplexFunctionArgumentExpression complexFunctionArgumentExpression)
         {
             var inferredTypeMapping = ExpressionExtensions.InferTypeMapping(complexFunctionArgumentExpression.ArgumentParts.ToArray())
-                                      ?? _typeMappingSource.FindMapping(complexFunctionArgumentExpression.Type);
+                                      ?? (complexFunctionArgumentExpression.Type.IsArray
+                                          ? _typeMappingSource.FindMapping(
+                                              complexFunctionArgumentExpression.Type.GetElementType() ??
+                                              complexFunctionArgumentExpression.Type)
+                                          : _typeMappingSource.FindMapping(complexFunctionArgumentExpression.Type));
 
             return new MySqlComplexFunctionArgumentExpression(
                 complexFunctionArgumentExpression.ArgumentParts,
+                complexFunctionArgumentExpression.Delimiter,
                 complexFunctionArgumentExpression.Type,
                 inferredTypeMapping ?? complexFunctionArgumentExpression.TypeMapping);
         }
@@ -138,6 +368,18 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
                 collateExpression.Charset,
                 collateExpression.Collation,
                 inferredTypeMapping ?? collateExpression.TypeMapping);
+        }
+
+        private SqlExpression ApplyTypeMappingOnMatch(MySqlMatchExpression matchExpression)
+        {
+            var inferredTypeMapping = ExpressionExtensions.InferTypeMapping(matchExpression.Match) ??
+                                      _typeMappingSource.FindMapping(matchExpression.Match.Type);
+
+            return new MySqlMatchExpression(
+                ApplyTypeMapping(matchExpression.Match, inferredTypeMapping),
+                ApplyTypeMapping(matchExpression.Against, inferredTypeMapping),
+                matchExpression.SearchMode,
+                _boolTypeMapping);
         }
 
         private SqlExpression ApplyTypeMappingOnRegexp(MySqlRegexpExpression regexpExpression)
@@ -164,16 +406,24 @@ namespace Pomelo.EntityFrameworkCore.MySql.Query.Internal
 
             switch (sqlBinaryExpression.OperatorType)
             {
+                case MySqlBinaryExpressionOperatorType.NonOptimizedEqual:
+                    inferredTypeMapping = ExpressionExtensions.InferTypeMapping(left, right)
+                                          // We avoid object here since the result does not get typeMapping from outside.
+                                          ?? (left.Type != typeof(object)
+                                              ? _typeMappingSource.FindMapping(left.Type)
+                                              : _typeMappingSource.FindMapping(right.Type));
+                    resultType = typeof(bool);
+                    resultTypeMapping = _boolTypeMapping;
+                    break;
+
                 case MySqlBinaryExpressionOperatorType.IntegerDivision:
-                {
                     inferredTypeMapping = typeMapping ?? ExpressionExtensions.InferTypeMapping(left, right);
-                    resultType = left.Type;
+                    resultType = inferredTypeMapping?.ClrType ?? left.Type;
                     resultTypeMapping = inferredTypeMapping;
-                }
-                break;
+                    break;
 
                 default:
-                    throw new InvalidOperationException("Incorrect OperatorType for MySqlBinaryExpression");
+                    throw new InvalidOperationException($"Incorrect {nameof(MySqlBinaryExpression.OperatorType)} for {nameof(MySqlBinaryExpression)}");
             }
 
             return new MySqlBinaryExpression(

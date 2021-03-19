@@ -1,87 +1,76 @@
-﻿using System;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore.TestUtilities;
+using Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.Query
 {
-    public class EscapesMySqlNoBackslashesTest : EscapesMySqlTestBase<NorthwindEscapesNoBackslashesMySqlFixture<NoopModelCustomizer>>
+    public class EscapesMySqlNoBackslashesTest : EscapesMySqlTestBase<EscapesMySqlNoBackslashesTest.EscapesMySqlNoBackslashesFixture>
     {
-        public EscapesMySqlNoBackslashesTest(NorthwindEscapesNoBackslashesMySqlFixture<NoopModelCustomizer> fixture, ITestOutputHelper testOutputHelper)
+        public EscapesMySqlNoBackslashesTest(EscapesMySqlNoBackslashesFixture fixture, ITestOutputHelper testOutputHelper)
             : base(fixture)
         {
-            fixture.TestSqlLoggerFactory.Clear();
             //fixture.TestSqlLoggerFactory.SetTestOutputHelper(testOutputHelper);
-        }
-
-        protected void AssertSql(params string[] expected)
-        {
-            Fixture.TestSqlLoggerFactory.AssertBaseline(expected);
         }
 
         [ConditionalFact]
         public override void Input_query_escapes_parameter()
         {
             base.Input_query_escapes_parameter();
- 
-            AssertSql(
-                $@"@p0='ESCBCKSLINS' (Nullable = false) (Size = {Math.Min(AppConfig.ServerVersion.MaxKeyLength / (2 * 4), 255)})
-@p1=NULL (Size = 4000)
-@p2=NULL (Size = 4000)
-@p3='Back\slash's Insert Operation' (Size = 4000)
-@p4=NULL (Size = 4000)
-@p5=NULL (Size = 4000)
-@p6=NULL (Size = 4000)
-@p7=NULL (Size = 4000)
-@p8=NULL (Size = 4000)
-@p9=NULL (Size = 4000)
-@p10=NULL (Size = 4000)
 
-INSERT INTO `Customers` (`CustomerID`, `Address`, `City`, `CompanyName`, `ContactName`, `ContactTitle`, `Country`, `Fax`, `Phone`, `PostalCode`, `Region`)
-VALUES (@p0, @p1, @p2, @p3, @p4, @p5, @p6, @p7, @p8, @p9, @p10);",
+            AssertSql(
+                @"@p0='Back\slash's Garden Party' (Nullable = false) (Size = 4000)
+
+INSERT INTO `Artists` (`Name`)
+VALUES (@p0);
+SELECT `ArtistId`
+FROM `Artists`
+WHERE ROW_COUNT() = 1 AND `ArtistId` = LAST_INSERT_ID();",
                 //
-                @"SELECT `c`.`CustomerID`, `c`.`Address`, `c`.`City`, `c`.`CompanyName`, `c`.`ContactName`, `c`.`ContactTitle`, `c`.`Country`, `c`.`Fax`, `c`.`Phone`, `c`.`PostalCode`, `c`.`Region`
-FROM `Customers` AS `c`
-WHERE `c`.`CustomerID` = 'ESCBCKSLINS'");
+                @"SELECT `a`.`ArtistId`, `a`.`Name`
+FROM `Artists` AS `a`
+WHERE `a`.`Name` LIKE '% Garden Party'");
         }
 
         [ConditionalTheory]
-        [MemberData(nameof(IsAsyncData))]
-        public override async Task Where_query_escapes_literal(bool isAsync)
+        public override async Task Where_query_escapes_literal(bool async)
         {
-            await base.Where_query_escapes_literal(isAsync);
- 
-            AssertSql(
-                @"SELECT `c`.`CustomerID`, `c`.`Address`, `c`.`City`, `c`.`CompanyName`, `c`.`ContactName`, `c`.`ContactTitle`, `c`.`Country`, `c`.`Fax`, `c`.`Phone`, `c`.`PostalCode`, `c`.`Region`
-FROM `Customers` AS `c`
-WHERE `c`.`CompanyName` = 'Back\slash''s Operation'");
-        }
-        
-        [ConditionalTheory]
-        [MemberData(nameof(IsAsyncData))]
-        public override async Task Where_query_escapes_parameter(bool isAsync)
-        {
-            await base.Where_query_escapes_parameter(isAsync);
+            await base.Where_query_escapes_literal(async);
 
             AssertSql(
-                @"@__companyName_0='Back\slash's Operation' (Size = 4000)
-
-SELECT `c`.`CustomerID`, `c`.`Address`, `c`.`City`, `c`.`CompanyName`, `c`.`ContactName`, `c`.`ContactTitle`, `c`.`Country`, `c`.`Fax`, `c`.`Phone`, `c`.`PostalCode`, `c`.`Region`
-FROM `Customers` AS `c`
-WHERE `c`.`CompanyName` = @__companyName_0");
+                @"SELECT `a`.`ArtistId`, `a`.`Name`
+FROM `Artists` AS `a`
+WHERE `a`.`Name` = 'Back\slasher''s'");
         }
 
         [ConditionalTheory]
-        [MemberData(nameof(IsAsyncData))]
-        public override async Task Where_contains_query_escapes(bool isAsync)
+        public override async Task Where_query_escapes_parameter(bool async)
         {
-            await base.Where_contains_query_escapes(isAsync);
+            await base.Where_query_escapes_parameter(async);
 
             AssertSql(
-                @"SELECT `c`.`CustomerID`, `c`.`Address`, `c`.`City`, `c`.`CompanyName`, `c`.`ContactName`, `c`.`ContactTitle`, `c`.`Country`, `c`.`Fax`, `c`.`Phone`, `c`.`PostalCode`, `c`.`Region`
-FROM `Customers` AS `c`
-WHERE `c`.`CompanyName` IN ('Back\slash''s Operation', 'B''s Beverages')");
+                @"@__artistName_0='Back\slasher's' (Size = 4000)
+
+SELECT `a`.`ArtistId`, `a`.`Name`
+FROM `Artists` AS `a`
+WHERE `a`.`Name` = @__artistName_0");
+        }
+
+        [ConditionalTheory]
+        public override async Task Where_contains_query_escapes(bool async)
+        {
+            await base.Where_contains_query_escapes(async);
+
+            AssertSql(
+                @"SELECT `a`.`ArtistId`, `a`.`Name`
+FROM `Artists` AS `a`
+WHERE `a`.`Name` IN ('Back\slasher''s', 'John''s Chill Box')");
+        }
+
+        public class EscapesMySqlNoBackslashesFixture : EscapesMySqlFixtureBase
+        {
+            protected override ITestStoreFactory TestStoreFactory => MySqlTestStoreFactory.NoBackslashEscapesInstance;
         }
     }
 }

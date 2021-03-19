@@ -10,7 +10,8 @@ using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Internal;
 
@@ -103,7 +104,9 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
         }
 
         protected override bool SupportsAmbientTransactions => true;
-        public override bool IsMultipleActiveResultSetsEnabled => false;
+
+        // CHECK: Is this obsolete or has it been moved somewhere else?
+        // public override bool IsMultipleActiveResultSetsEnabled => false;
 
         public override void EnlistTransaction(Transaction transaction)
         {
@@ -131,7 +134,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
             {
                 if (_mySqlOptionsExtension.UpdateSqlModeOnOpen && _mySqlOptionsExtension.NoBackslashEscapes)
                 {
-                    AppendToSqlMode(NoBackslashEscapes);
+                    AddSqlMode(NoBackslashEscapes);
                 }
             }
 
@@ -140,23 +143,31 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 
         public override async Task<bool> OpenAsync(CancellationToken cancellationToken, bool errorsExpected = false)
         {
-            var result = await base.OpenAsync(cancellationToken, errorsExpected);
+            var result = await base.OpenAsync(cancellationToken, errorsExpected)
+                .ConfigureAwait(false);
 
             if (result)
             {
                 if (_mySqlOptionsExtension.UpdateSqlModeOnOpen && _mySqlOptionsExtension.NoBackslashEscapes)
                 {
-                    await AppendToSqlModeAsync(NoBackslashEscapes);
+                    await AddSqlModeAsync(NoBackslashEscapes)
+                        .ConfigureAwait(false);
                 }
             }
 
             return result;
         }
 
-        public virtual void AppendToSqlMode(string mode)
-            => Dependencies.CurrentContext.Context?.Database.ExecuteSqlRaw(@"SET SESSION sql_mode = CONCAT(@@sql_mode, ',', @p0)", new MySqlParameter("@p0", mode));
+        public virtual void AddSqlMode(string mode)
+            => Dependencies.CurrentContext.Context?.Database.ExecuteSqlInterpolated($@"SET SESSION sql_mode = CONCAT(@@sql_mode, ',', {mode});");
 
-        public virtual Task AppendToSqlModeAsync(string mode)
-            => Dependencies.CurrentContext.Context?.Database.ExecuteSqlRawAsync(@"SET SESSION sql_mode = CONCAT(@@sql_mode, ',', @p0)", new MySqlParameter("@p0", mode));
+        public virtual Task AddSqlModeAsync(string mode)
+            => Dependencies.CurrentContext.Context?.Database.ExecuteSqlInterpolatedAsync($@"SET SESSION sql_mode = CONCAT(@@sql_mode, ',', {mode});");
+
+        public virtual void RemoveSqlMode(string mode)
+            => Dependencies.CurrentContext.Context?.Database.ExecuteSqlInterpolated($@"SET SESSION sql_mode = REPLACE(@@sql_mode, {mode}, '');");
+
+        public virtual void RemoveSqlModeAsync(string mode)
+            => Dependencies.CurrentContext.Context?.Database.ExecuteSqlInterpolatedAsync($@"SET SESSION sql_mode = REPLACE(@@sql_mode, {mode}, '');");
     }
 }

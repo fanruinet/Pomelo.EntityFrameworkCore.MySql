@@ -1,12 +1,16 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
+using Pomelo.EntityFrameworkCore.MySql.Tests;
 
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities
 {
     public class TestMySqlRetryingExecutionStrategy : MySqlRetryingExecutionStrategy
     {
+        private const bool ErrorNumberDebugMode = false;
+
+        // TODO: Check for correct MySQL error codes.
         private static readonly int[] _additionalErrorNumbers =
         {
             -1, // Physical connection is not usable
@@ -21,7 +25,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities
                 new DbContext(
                     new DbContextOptionsBuilder()
                         .EnableServiceProviderCaching(false)
-                        .UseMySql(TestEnvironment.DefaultConnection).Options),
+                        .UseMySql(TestEnvironment.DefaultConnection, AppConfig.ServerVersion).Options),
                 DefaultMaxRetryCount, DefaultMaxDelay, _additionalErrorNumbers)
         {
         }
@@ -48,25 +52,23 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.TestUtilities
                 return true;
             }
 
-            if (exception is MySqlException mySqlException)
+#pragma warning disable 162
+            if (ErrorNumberDebugMode &&
+                exception is MySqlException mySqlException)
             {
-                var message = $"Didn't retry on {mySqlException.SqlState}";
-                throw new InvalidOperationException(message + exception, exception);
+                var message = $"Didn't retry on {mySqlException.ErrorCode} ({(int)mySqlException.ErrorCode}/0x{(int)mySqlException.ErrorCode:X8})";
+                throw new InvalidOperationException(message, exception);
             }
+#pragma warning restore 162
 
-            return false;
+            return exception is InvalidOperationException invalidOperationException
+                && invalidOperationException.Message == "Internal .Net Framework Data Provider error 6.";
         }
 
         public new virtual TimeSpan? GetNextDelay(Exception lastException)
         {
             ExceptionsEncountered.Add(lastException);
             return base.GetNextDelay(lastException);
-        }
-
-        public static new bool Suspended
-        {
-            get => ExecutionStrategy.Suspended;
-            set => ExecutionStrategy.Suspended = value;
         }
     }
 }

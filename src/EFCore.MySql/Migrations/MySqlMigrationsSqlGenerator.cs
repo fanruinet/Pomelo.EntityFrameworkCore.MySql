@@ -1,7 +1,8 @@
-// Copyright (c) .NET Foundation. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+// Copyright (c) Pomelo Foundation. All rights reserved.
+// Licensed under the MIT. See LICENSE in the project root for license information.
 
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
@@ -17,10 +18,10 @@ using Microsoft.EntityFrameworkCore.Utilities;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Metadata.Internal;
-using Pomelo.EntityFrameworkCore.MySql.Storage;
 
 namespace Pomelo.EntityFrameworkCore.MySql.Migrations
 {
+    // CHECK: Can we increase the usage of the new model over the old one, or are we done here?
     /// <summary>
     ///     MySql-specific implementation of <see cref="MigrationsSqlGenerator" />.
     /// </summary>
@@ -29,7 +30,119 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         private static readonly Regex _typeRegex = new Regex(@"([a-z0-9]+)\s*?(?:\(\s*(\d+)?\s*\))?",
             RegexOptions.IgnoreCase);
 
-        private readonly IMigrationsAnnotationProvider _migrationsAnnotations;
+        private static readonly HashSet<string> _spatialStoreTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "geometry",
+            "point",
+            "curve",
+            "linestring",
+            "line",
+            "linearring",
+            "surface",
+            "polygon",
+            "geometrycollection",
+            "multipoint",
+            "multicurve",
+            "multilinestring",
+            "multisurface",
+            "multipolygon",
+        };
+
+        private static readonly Dictionary<Type, (string beginText, string endText)> _customMigrationCommands = new Dictionary<Type, (string beginText, string endText)>
+        {
+            { typeof(DropPrimaryKeyOperation), (beginText: BeforeDropPrimaryKeyMigrationBegin, endText: BeforeDropPrimaryKeyMigrationEnd) },
+            { typeof(AddPrimaryKeyOperation), (beginText: AfterAddPrimaryKeyMigrationBegin, endText: AfterAddPrimaryKeyMigrationEnd) },
+        };
+
+        #region Custom SQL
+
+        private const string BeforeDropPrimaryKeyMigrationBegin = @"DROP PROCEDURE IF EXISTS `POMELO_BEFORE_DROP_PRIMARY_KEY`;
+DELIMITER //
+CREATE PROCEDURE `POMELO_BEFORE_DROP_PRIMARY_KEY`(IN `SCHEMA_NAME_ARGUMENT` VARCHAR(255), IN `TABLE_NAME_ARGUMENT` VARCHAR(255))
+BEGIN
+	DECLARE HAS_AUTO_INCREMENT_ID TINYINT(1);
+	DECLARE PRIMARY_KEY_COLUMN_NAME VARCHAR(255);
+	DECLARE PRIMARY_KEY_TYPE VARCHAR(255);
+	DECLARE SQL_EXP VARCHAR(1000);
+	SELECT COUNT(*)
+		INTO HAS_AUTO_INCREMENT_ID
+		FROM `information_schema`.`COLUMNS`
+		WHERE `TABLE_SCHEMA` = (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA()))
+			AND `TABLE_NAME` = TABLE_NAME_ARGUMENT
+			AND `Extra` = 'auto_increment'
+			AND `COLUMN_KEY` = 'PRI'
+			LIMIT 1;
+	IF HAS_AUTO_INCREMENT_ID THEN
+		SELECT `COLUMN_TYPE`
+			INTO PRIMARY_KEY_TYPE
+			FROM `information_schema`.`COLUMNS`
+			WHERE `TABLE_SCHEMA` = (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA()))
+				AND `TABLE_NAME` = TABLE_NAME_ARGUMENT
+				AND `COLUMN_KEY` = 'PRI'
+			LIMIT 1;
+		SELECT `COLUMN_NAME`
+			INTO PRIMARY_KEY_COLUMN_NAME
+			FROM `information_schema`.`COLUMNS`
+			WHERE `TABLE_SCHEMA` = (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA()))
+				AND `TABLE_NAME` = TABLE_NAME_ARGUMENT
+				AND `COLUMN_KEY` = 'PRI'
+			LIMIT 1;
+		SET SQL_EXP = CONCAT('ALTER TABLE `', (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA())), '`.`', TABLE_NAME_ARGUMENT, '` MODIFY COLUMN `', PRIMARY_KEY_COLUMN_NAME, '` ', PRIMARY_KEY_TYPE, ' NOT NULL;');
+		SET @SQL_EXP = SQL_EXP;
+		PREPARE SQL_EXP_EXECUTE FROM @SQL_EXP;
+		EXECUTE SQL_EXP_EXECUTE;
+		DEALLOCATE PREPARE SQL_EXP_EXECUTE;
+	END IF;
+END //
+DELIMITER ;";
+        private const string BeforeDropPrimaryKeyMigrationEnd = @"DROP PROCEDURE `POMELO_BEFORE_DROP_PRIMARY_KEY`;";
+
+        private const string AfterAddPrimaryKeyMigrationBegin = @"DROP PROCEDURE IF EXISTS `POMELO_AFTER_ADD_PRIMARY_KEY`;
+DELIMITER //
+CREATE PROCEDURE `POMELO_AFTER_ADD_PRIMARY_KEY`(IN `SCHEMA_NAME_ARGUMENT` VARCHAR(255), IN `TABLE_NAME_ARGUMENT` VARCHAR(255), IN `COLUMN_NAME_ARGUMENT` VARCHAR(255))
+BEGIN
+	DECLARE HAS_AUTO_INCREMENT_ID INT(11);
+	DECLARE PRIMARY_KEY_COLUMN_NAME VARCHAR(255);
+	DECLARE PRIMARY_KEY_TYPE VARCHAR(255);
+	DECLARE SQL_EXP VARCHAR(1000);
+	SELECT COUNT(*)
+		INTO HAS_AUTO_INCREMENT_ID
+		FROM `information_schema`.`COLUMNS`
+		WHERE `TABLE_SCHEMA` = (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA()))
+			AND `TABLE_NAME` = TABLE_NAME_ARGUMENT
+			AND `COLUMN_NAME` = COLUMN_NAME_ARGUMENT
+			AND `COLUMN_TYPE` LIKE '%int%'
+			AND `COLUMN_KEY` = 'PRI';
+	IF HAS_AUTO_INCREMENT_ID THEN
+		SELECT `COLUMN_TYPE`
+			INTO PRIMARY_KEY_TYPE
+			FROM `information_schema`.`COLUMNS`
+			WHERE `TABLE_SCHEMA` = (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA()))
+				AND `TABLE_NAME` = TABLE_NAME_ARGUMENT
+				AND `COLUMN_NAME` = COLUMN_NAME_ARGUMENT
+				AND `COLUMN_TYPE` LIKE '%int%'
+				AND `COLUMN_KEY` = 'PRI';
+		SELECT `COLUMN_NAME`
+			INTO PRIMARY_KEY_COLUMN_NAME
+			FROM `information_schema`.`COLUMNS`
+			WHERE `TABLE_SCHEMA` = (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA()))
+				AND `TABLE_NAME` = TABLE_NAME_ARGUMENT
+				AND `COLUMN_NAME` = COLUMN_NAME_ARGUMENT
+				AND `COLUMN_TYPE` LIKE '%int%'
+				AND `COLUMN_KEY` = 'PRI';
+		SET SQL_EXP = CONCAT('ALTER TABLE `', (SELECT IFNULL(SCHEMA_NAME_ARGUMENT, SCHEMA())), '`.`', TABLE_NAME_ARGUMENT, '` MODIFY COLUMN `', PRIMARY_KEY_COLUMN_NAME, '` ', PRIMARY_KEY_TYPE, ' NOT NULL AUTO_INCREMENT;');
+		SET @SQL_EXP = SQL_EXP;
+		PREPARE SQL_EXP_EXECUTE FROM @SQL_EXP;
+		EXECUTE SQL_EXP_EXECUTE;
+		DEALLOCATE PREPARE SQL_EXP_EXECUTE;
+	END IF;
+END //
+DELIMITER ;";
+        private const string AfterAddPrimaryKeyMigrationEnd = @"DROP PROCEDURE `POMELO_AFTER_ADD_PRIMARY_KEY`;";
+
+        #endregion
+
+        private readonly IRelationalAnnotationProvider _annotationProvider;
         private readonly IMySqlOptions _options;
         private readonly RelationalTypeMapping _stringTypeMapping;
 
@@ -37,13 +150,113 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
 
         public MySqlMigrationsSqlGenerator(
             [NotNull] MigrationsSqlGeneratorDependencies dependencies,
-            [NotNull] IMigrationsAnnotationProvider migrationsAnnotations,
+            [NotNull] IRelationalAnnotationProvider annotationProvider,
             [NotNull] IMySqlOptions options)
             : base(dependencies)
         {
-            _migrationsAnnotations = migrationsAnnotations;
+            _annotationProvider = annotationProvider;
             _options = options;
             _stringTypeMapping = dependencies.TypeMappingSource.GetMapping(typeof(string));
+        }
+
+        public override IReadOnlyList<MigrationCommand> Generate(IReadOnlyList<MigrationOperation> operations, IModel model = null, MigrationsSqlGenerationOptions options = MigrationsSqlGenerationOptions.Default)
+        {
+            var commands = base.Generate(operations, model, options);
+
+            // Some operations depend on custom stored procedures. If those operations are used, the stored procedures are added before any
+            // actual migration operations and removed after all actual migration operations.
+            return WrapWithCustomCommands(
+                operations,
+                commands.ToList(),
+                options);
+        }
+
+        private IReadOnlyList<MigrationCommand> WrapWithCustomCommands(
+            IReadOnlyList<MigrationOperation> migrationOperations,
+            List<MigrationCommand> migrationCommands,
+            MigrationsSqlGenerationOptions options)
+        {
+            var commandTexts = GetMigrationCommandTexts(migrationOperations, true, options);
+            if (commandTexts.Length > 0)
+            {
+                var customCommands = new MigrationCommandListBuilder(Dependencies);
+
+                foreach (var commandText in commandTexts)
+                {
+                    customCommands
+                        .Append(commandText)
+                        .EndCommand();
+                }
+
+                migrationCommands.InsertRange(0, customCommands.GetCommandList());
+            }
+
+            commandTexts = GetMigrationCommandTexts(migrationOperations, false, options);
+            if (commandTexts.Length > 0)
+            {
+                var customCommands = new MigrationCommandListBuilder(Dependencies);
+
+                foreach (var commandText in commandTexts)
+                {
+                    customCommands
+                        .Append(commandText)
+                        .EndCommand();
+                }
+
+                migrationCommands.AddRange(customCommands.GetCommandList());
+            }
+
+            return migrationCommands;
+        }
+
+        private string[] GetMigrationCommandTexts(
+            IReadOnlyList<MigrationOperation> migrationOperations,
+            bool beginTexts,
+            MigrationsSqlGenerationOptions options)
+            => GetCustomCommands(migrationOperations)
+                .Select(t => PrepareString(beginTexts ? t.beginText : t.endText, options))
+                .ToArray();
+
+        private static IReadOnlyList<(string beginText, string endText)> GetCustomCommands(IReadOnlyList<MigrationOperation> migrationOperations)
+            => _customMigrationCommands
+                .Where(c => migrationOperations.Any(o => c.Key.IsInstanceOfType(o)))
+                .Select(kvp => kvp.Value)
+                .ToList();
+
+        private string PrepareString(string str, MigrationsSqlGenerationOptions options)
+        {
+            str = options.HasFlag(MigrationsSqlGenerationOptions.Script)
+                ? str
+                : CleanUpScriptSpecificPseudoStatements(str);
+
+            str = str
+                .Replace("\r", string.Empty)
+                .Replace("\n", Environment.NewLine);
+
+            str += options.HasFlag(MigrationsSqlGenerationOptions.Script)
+                ? Environment.NewLine + (
+                    options.HasFlag(MigrationsSqlGenerationOptions.Idempotent)
+                        ? Environment.NewLine
+                        : string.Empty)
+                : string.Empty;
+
+            return str;
+        }
+
+        private static string CleanUpScriptSpecificPseudoStatements(string commandText)
+        {
+            const string delimiterPattern = @"^\s*DELIMITER\s*(?<Delimiter>;|//)\s*$";
+            const RegexOptions delimiterPatternRegexOptions = RegexOptions.IgnoreCase | RegexOptions.Multiline;
+
+            var delimiter = Regex.Match(commandText, delimiterPattern, delimiterPatternRegexOptions);
+
+            if (delimiter.Success)
+            {
+                var result = Regex.Replace(commandText, delimiterPattern, string.Empty, delimiterPatternRegexOptions);
+                return Regex.Replace(result, $@"\s*{Regex.Escape(delimiter.Groups["Delimiter"].Value)}\s*$", ";", delimiterPatternRegexOptions);
+            }
+
+            return commandText;
         }
 
         /// <summary>
@@ -59,7 +272,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     </para>
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(MigrationOperation operation, IModel model, MigrationCommandListBuilder builder)
         {
@@ -75,6 +288,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                 case MySqlDropDatabaseOperation dropDatabaseOperation:
                     Generate(dropDatabaseOperation, model, builder);
                     break;
+                case MySqlDropPrimaryKeyAndRecreateForeignKeysOperation dropPrimaryKeyAndRecreateForeignKeysOperation:
+                    Generate(dropPrimaryKeyAndRecreateForeignKeysOperation, model, builder);
+                    break;
+                case MySqlDropUniqueConstraintAndRecreateForeignKeysOperation dropUniqueConstraintAndRecreateForeignKeysOperation:
+                    Generate(dropUniqueConstraintAndRecreateForeignKeysOperation, model, builder);
+                    break;
                 default:
                     base.Generate(operation, model, builder);
                     break;
@@ -83,6 +302,11 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
 
         protected virtual void CheckSchema(MigrationOperation operation)
         {
+            if (_options.SchemaNameTranslator != null)
+            {
+                return;
+            }
+
             var schema = operation.GetType()
                 .GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetProperty)
                 .Where(p => p.Name.IndexOf(nameof(AddForeignKeyOperation.Schema), StringComparison.Ordinal) >= 0)
@@ -95,7 +319,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                     .GetProperty(nameof(AddForeignKeyOperation.Name), BindingFlags.Instance | BindingFlags.Public | BindingFlags.GetProperty)
                     ?.GetValue(operation) as string;
 
-                throw new InvalidOperationException($"A schema \"{schema}\" has been set for an object of type \"{operation.GetType().Name}\"{(string.IsNullOrEmpty(name) ? string.Empty : $" with the name of \"{name}\"")}. MySQL does not support the EF Core concept of schemas. Any schema property of any \"MigrationOperation\" must be null.");
+                throw new InvalidOperationException($"A schema \"{schema}\" has been set for an object of type \"{operation.GetType().Name}\"{(string.IsNullOrEmpty(name) ? string.Empty : $" with the name of \"{name}\"")}. MySQL does not support the EF Core concept of schemas. Any schema property of any \"MigrationOperation\" must be null. This behavior can be changed by setting the `SchemaBehavior` option in the `UseMySql` call.");
             }
         }
 
@@ -143,7 +367,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     by making calls on the given <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
             AlterColumnOperation operation,
@@ -175,7 +399,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     by making calls on the given <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
             RenameIndexOperation operation,
@@ -187,7 +411,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
 
             if (operation.NewName != null)
             {
-                if (_options.ServerVersion.SupportsRenameIndex)
+                if (_options.ServerVersion.Supports.RenameIndex)
                 {
                     builder.Append("ALTER TABLE ")
                         .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema))
@@ -201,9 +425,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                 }
                 else
                 {
-                    var index = FindEntityTypes(model, operation.Schema, operation.Table)
-                        ?.SelectMany(e => e.GetDeclaredIndexes())
-                        .FirstOrDefault(i => i.GetName() == operation.NewName);
+                    var index = model?
+                        .GetRelationalModel()
+                        .FindTable(operation.Table, operation.Schema)
+                        ?.Indexes
+                        .FirstOrDefault(i => i.Name == operation.NewName);
+
                     if (index == null)
                     {
                         throw new InvalidOperationException(
@@ -222,11 +449,11 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                         Schema = operation.Schema,
                         Table = operation.Table,
                         Name = operation.NewName,
-                        Columns = index.Properties.Select(p => p.GetColumnName()).ToArray(),
+                        Columns = index.Columns.Select(c => c.Name).ToArray(),
                         IsUnique = index.IsUnique,
-                        Filter = index.GetFilter()
+                        Filter = index.Filter,
                     };
-                    createIndexOperation.AddAnnotations(_migrationsAnnotations.For(index));
+                    createIndexOperation.AddAnnotations(_annotationProvider.For(index));
                     createIndexOperation.AddAnnotations(operation.GetAnnotations());
 
                     Generate(createIndexOperation, model, builder);
@@ -239,7 +466,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     <see cref="MigrationCommandListBuilder" />, and then terminates the final command.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
             RestartSequenceOperation operation,
@@ -248,7 +475,11 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         {
             Check.NotNull(operation, nameof(operation));
             Check.NotNull(builder, nameof(builder));
-
+            if (!_options.ServerVersion.Supports.Sequences)
+            {
+                throw new InvalidOperationException(
+                    $"Cannot restart sequence '{operation.Name}' because sequences are not supported in server version {_options.ServerVersion}.");
+            }
             builder
                 .Append("ALTER SEQUENCE ")
                 .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name, operation.Schema))
@@ -264,7 +495,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     by making calls on the given <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
             RenameTableOperation operation,
@@ -289,7 +520,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         /// <param name="terminate"> Indicates whether or not to terminate the command after generating SQL for the operation. </param>
         protected override void Generate(
@@ -298,16 +529,41 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             MigrationCommandListBuilder builder,
             bool terminate = true)
         {
-            operation.Filter = null;
-            operation.Name = Truncate(operation.Name, 64);
-            base.Generate(operation, model, builder, terminate);
+            Check.NotNull(operation, nameof(operation));
+            Check.NotNull(builder, nameof(builder));
+
+            builder.Append("CREATE ");
+
+            if (operation.IsUnique)
+            {
+                builder.Append("UNIQUE ");
+            }
+
+            IndexTraits(operation, model, builder);
+
+            builder
+                .Append("INDEX ")
+                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(Truncate(operation.Name, 64)))
+                .Append(" ON ")
+                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema))
+                .Append(" (")
+                .Append(ColumnListWithIndexPrefixLength(operation, operation.Columns))
+                .Append(")");
+
+            IndexOptions(operation, model, builder);
+
+            if (terminate)
+            {
+                builder.AppendLine(Dependencies.SqlGenerationHelper.StatementTerminator);
+                EndStatement(builder);
+            }
         }
 
         /// /// <summary>
         ///     Ignored, since schemas are not supported by MySQL and are silently ignored to improve testing compatibility.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(EnsureSchemaOperation operation, IModel model,
             MigrationCommandListBuilder builder)
@@ -318,7 +574,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     Ignored, since schemas are not supported by MySQL and are silently ignored to improve testing compatibility.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(DropSchemaOperation operation, IModel model, MigrationCommandListBuilder builder)
         {
@@ -329,38 +585,35 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     <see cref="MigrationCommandListBuilder" />, and then terminates the final command.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
-            CreateSequenceOperation operation,
-            IModel model,
-            MigrationCommandListBuilder builder)
+            [NotNull] CreateSequenceOperation operation,
+            [CanBeNull] IModel model,
+            [NotNull] MigrationCommandListBuilder builder)
         {
             Check.NotNull(operation, nameof(operation));
             Check.NotNull(builder, nameof(builder));
-
-            builder
-                .Append("CREATE SEQUENCE ")
-                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name, operation.Schema));
-
-            if (operation.ClrType != typeof(long))
+            if (!_options.ServerVersion.Supports.Sequences)
             {
-                var typeMapping = Dependencies.TypeMappingSource.GetMapping(operation.ClrType);
-
-                builder
-                    .Append(" AS ")
-                    .Append(typeMapping.StoreType);
+                throw new InvalidOperationException(
+                    $"Cannot create sequence '{operation.Name}' because sequences are not supported in server version {_options.ServerVersion}.");
             }
 
-            builder
-                .Append(" START WITH ")
-                .Append(IntegerConstant(operation.StartValue));
-
-            SequenceOptions(operation, model, builder);
-
-            builder.AppendLine(Dependencies.SqlGenerationHelper.StatementTerminator);
-
-            EndStatement(builder);
+            // "CREATE SEQUENCE"  supported only in MariaDb from 10.3.
+            // However, "CREATE SEQUENCE name AS type" expression is currently not supported.
+            // The base MigrationsSqlGenerator.Generate method generates that expression.
+            // Also, when creating a sequence current version of MariaDb doesn't tolerate "NO MINVALUE"
+            // when specifying "STARTS WITH" so, StartValue mus be set accordingly.
+            // https://github.com/aspnet/EntityFrameworkCore/blob/master/src/EFCore.Relational/Migrations/MigrationsSqlGenerator.cs#L535-L543
+            var oldValue = operation.ClrType;
+            operation.ClrType = typeof(long);
+            if (operation.StartValue <= 0 )
+            {
+                operation.MinValue = operation.StartValue;
+            }
+            base.Generate(operation, model, builder);
+            operation.ClrType = oldValue;
         }
 
         /// <summary>
@@ -368,7 +621,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     by making calls on the given <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected virtual void Generate(
             [NotNull] MySqlCreateDatabaseOperation operation,
@@ -392,7 +645,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     by making calls on the given <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected virtual void Generate(
             [NotNull] MySqlDropDatabaseOperation operation,
@@ -410,13 +663,6 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             EndStatement(builder);
         }
 
-        /// <summary>
-        ///     Builds commands for the given <see cref="DropIndexOperation" />
-        ///     by making calls on the given <see cref="MigrationCommandListBuilder" />, and then terminates the final command.
-        /// </summary>
-        /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
-        /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
             [NotNull] DropIndexOperation operation,
             [CanBeNull] IModel model,
@@ -440,44 +686,122 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             }
         }
 
-        /// <summary>
-        ///     Builds commands for the given <see cref="DropUniqueConstraintOperation" /> by making calls on the given
-        ///     <see cref="MigrationCommandListBuilder" />, and then terminates the final command.
-        /// </summary>
-        /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
-        /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
-            DropUniqueConstraintOperation operation, IModel model, MigrationCommandListBuilder builder)
-            => Generate(operation, model, builder, terminate: true);
-
-        /// <summary>
-        ///     Builds commands for the given <see cref="DropUniqueConstraintOperation" /> by making calls on the given
-        ///     <see cref="MigrationCommandListBuilder" />, and then terminates the final command.
-        /// </summary>
-        /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
-        /// <param name="builder"> The command builder to use to build the commands. </param>
-        /// <param name="terminate"> Indicates whether or not to terminate the command after generating SQL for the operation. </param>
-        protected virtual void Generate(
             DropUniqueConstraintOperation operation,
             IModel model,
-            MigrationCommandListBuilder builder,
-            bool terminate)
+            MigrationCommandListBuilder builder)
+            => Generate(
+                new MySqlDropUniqueConstraintAndRecreateForeignKeysOperation
+                {
+                    IsDestructiveChange = operation.IsDestructiveChange,
+                    Name = operation.Name,
+                    Schema = operation.Schema,
+                    Table = operation.Table,
+                    RecreateForeignKeys = false,
+                },
+                model,
+                builder);
+
+        protected virtual void Generate(
+            MySqlDropUniqueConstraintAndRecreateForeignKeysOperation operation,
+            IModel model,
+            MigrationCommandListBuilder builder)
         {
             Check.NotNull(operation, nameof(operation));
             Check.NotNull(builder, nameof(builder));
 
-            builder
-                .Append("ALTER TABLE ")
-                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema))
-                .Append(" DROP KEY ")
-                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name));
-
-            if (terminate)
+            void DropUniqueKey()
             {
-                builder.AppendLine(Dependencies.SqlGenerationHelper.StatementTerminator);
+                builder.Append("ALTER TABLE ")
+                    .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema))
+                    .Append(" DROP KEY ")
+                    .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name))
+                    .AppendLine(Dependencies.SqlGenerationHelper.StatementTerminator);
+
                 EndStatement(builder);
+            }
+
+            // A foreign key might reuse the alternate key for its own purposes and prohibit its deletion,
+            // if the foreign key columns are listed as the first columns and in the same order as in the foreign key (#678).
+            // We therefore drop and later recreate all foreign keys to ensure, that no other dependencies on the
+            // alternate key exist, if explicitly requested by the user via `MySqlMigrationBuilderExtensions.DropUniqueConstraint()`.
+            if (operation.RecreateForeignKeys)
+            {
+                TemporarilyDropForeignKeys(
+                    model,
+                    builder,
+                    operation.Schema,
+                    operation.Table,
+                    // model.GetRelationalModel()
+                    //     .FindTable(operation.Table, operation.Schema)
+                    //     ?.Columns
+                    //     .Select(c => c.Name)
+                    //     .ToArray(),
+                    null,
+                    DropUniqueKey);
+            }
+            else
+            {
+                DropUniqueKey();
+            }
+        }
+
+        protected void TemporarilyDropForeignKeys(
+            IModel model,
+            MigrationCommandListBuilder builder,
+            string schemaName,
+            string tableName,
+            string[] columnNames,
+            Action action)
+        {
+            var foreignKeys = model.GetRelationalModel()
+                .FindTable(tableName, schemaName)
+                ?.ForeignKeyConstraints?.Where(cs => columnNames == null ||
+                                                     columnNames.Length == 0 ||
+                                                     cs.Columns.Select(c => c.Name).SequenceEqual(columnNames))
+                .ToArray() ?? Array.Empty<IForeignKeyConstraint>();
+
+            foreach (var foreignKey in foreignKeys)
+            {
+                Generate(new DropForeignKeyOperation
+                {
+                    Schema = schemaName,
+                    Table = tableName,
+                    Name = foreignKey.Name,
+                }, model, builder);
+            }
+
+            action();
+
+            foreach (var foreignKey in foreignKeys)
+            {
+                Generate(new AddForeignKeyOperation
+                {
+                    Schema = foreignKey.Table.Schema,
+                    Table = foreignKey.Table.Name,
+                    Name = foreignKey.Name,
+                    Columns = foreignKey.Columns.Select(c => c.Name).ToArray(),
+                    PrincipalSchema = foreignKey.PrincipalTable.Schema,
+                    PrincipalTable = foreignKey.PrincipalTable.Name,
+                    PrincipalColumns = foreignKey.PrincipalColumns.Select(c => c.Name).ToArray(),
+                    OnDelete = foreignKey.OnDeleteAction,
+                }, model, builder);
+            }
+        }
+
+        protected static ReferentialAction ToReferentialAction(DeleteBehavior deleteBehavior)
+        {
+            switch (deleteBehavior)
+            {
+                case DeleteBehavior.SetNull:
+                    return ReferentialAction.SetNull;
+                case DeleteBehavior.Cascade:
+                    return ReferentialAction.Cascade;
+                case DeleteBehavior.NoAction:
+                case DeleteBehavior.ClientNoAction:
+                    return ReferentialAction.NoAction;
+                default:
+                    return ReferentialAction.Restrict;
             }
         }
 
@@ -486,7 +810,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         /// <param name="terminate"> Indicates whether or not to terminate the command after generating SQL for the operation. </param>
         protected override void Generate(
@@ -511,12 +835,13 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             }
         }
 
+        // CHECK: Can we improve this implementation?
         /// <summary>
         ///     Builds commands for the given <see cref="RenameColumnOperation" />
         ///     by making calls on the given <see cref="MigrationCommandListBuilder" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to build the commands. </param>
         protected override void Generate(
             RenameColumnOperation operation,
@@ -529,7 +854,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             builder.Append("ALTER TABLE ")
                 .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema));
 
-            if (_options.ServerVersion.SupportsRenameColumn)
+            if (_options.ServerVersion.Supports.RenameColumn)
             {
                 builder.Append(" RENAME COLUMN ")
                     .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name))
@@ -545,14 +870,13 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                 .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name))
                 .Append(" ");
 
-            var property = FindProperty(model, operation.Schema, operation.Table, operation.NewName);
-            if (property == null)
+            var column = model?.GetRelationalModel().FindTable(operation.Table, operation.Schema).FindColumn(operation.NewName);
+            if (column == null)
             {
-                var type = operation[RelationalAnnotationNames.ColumnType];
-                if (type == null)
+                if (!(operation[RelationalAnnotationNames.ColumnType] is string type))
                 {
                     throw new InvalidOperationException(
-                        $"Could not find the property corresponding to the column: {Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema)}.{Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.NewName)}. Specify the column type explicitly on 'RenameColumn' using the \"{RelationalAnnotationNames.ColumnType}\" annotation");
+                        $"Could not find the column: {Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema)}.{Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.NewName)}. Specify the column type explicitly on 'RenameColumn' using the \"{RelationalAnnotationNames.ColumnType}\" annotation");
                 }
 
                 builder
@@ -565,14 +889,14 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                 return;
             }
 
-            var typeMapping = Dependencies.TypeMappingSource.GetMapping(property);
-            var converter = typeMapping.Converter;
-            var clrType = (converter?.ProviderClrType ?? typeMapping.ClrType).UnwrapNullableType();
+            var typeMapping = column.PropertyMappings.FirstOrDefault()?.TypeMapping;
+            var converter = typeMapping?.Converter;
+            var clrType = (converter?.ProviderClrType ?? typeMapping?.ClrType).UnwrapNullableType();
             var columnType = (string)(operation[RelationalAnnotationNames.ColumnType]
-                                      ?? property[RelationalAnnotationNames.ColumnType]);
-            var isNullable = property.IsColumnNullable();
+                                      ?? column[RelationalAnnotationNames.ColumnType]);
+            var isNullable = column.IsNullable;
 
-            var defaultValue = property.GetDefaultValue();
+            var defaultValue = column.DefaultValue;
             defaultValue = converter != null
                 ? converter.ConvertToProvider(defaultValue)
                 : defaultValue;
@@ -585,9 +909,8 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                                        ? Array.CreateInstance(clrType.GetElementType(), 0)
                                        : clrType.GetDefaultValue());
 
-            var isRowVersion = (property.ClrType == typeof(DateTime) || property.ClrType == typeof(byte[]))
-                               && property.IsConcurrencyToken
-                               && property.ValueGenerated == ValueGenerated.OnAddOrUpdate;
+            var isRowVersion = (clrType == typeof(DateTime) || clrType == typeof(byte[])) &&
+                               column.IsRowVersion;
 
             var addColumnOperation = new AddColumnOperation
             {
@@ -596,14 +919,15 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                 Name = operation.NewName,
                 ClrType = clrType,
                 ColumnType = columnType,
-                IsUnicode = property.IsUnicode(),
-                MaxLength = property.GetMaxLength(),
-                IsFixedLength = property.IsFixedLength(),
+                IsUnicode = column.IsUnicode,
+                MaxLength = column.MaxLength,
+                IsFixedLength = column.IsFixedLength,
                 IsRowVersion = isRowVersion,
                 IsNullable = isNullable,
                 DefaultValue = defaultValue,
-                DefaultValueSql = property.GetDefaultValueSql(),
-                ComputedColumnSql = property.GetComputedColumnSql(),
+                DefaultValueSql = column.DefaultValueSql,
+                ComputedColumnSql = column.ComputedColumnSql,
+                IsStored = column.IsStored,
             };
 
             ColumnDefinition(
@@ -617,10 +941,10 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         /// <summary>
         ///     Generates a SQL fragment configuring a sequence with the given options.
         /// </summary>
-        /// <param name="schema"> The schema that contains the sequence, or <c>null</c> to use the default schema. </param>
+        /// <param name="schema"> The schema that contains the sequence, or <see langword="null"/> to use the default schema. </param>
         /// <param name="name"> The sequence name. </param>
         /// <param name="operation"> The sequence options. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to add the SQL fragment. </param>
         protected override void SequenceOptions(
             string schema,
@@ -659,14 +983,14 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                 builder.Append(" NO MAXVALUE");
             }
 
-            builder.Append(operation.IsCyclic ? " CYCLE" : " NO CYCLE");
+            builder.Append(operation.IsCyclic ? " CYCLE" : " NOCYCLE");
         }
 
         /// <summary>
         ///     Generates a SQL fragment for a column definition in an <see cref="AddColumnOperation" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to add the SQL fragment. </param>
         protected override void ColumnDefinition(AddColumnOperation operation, IModel model,
             MigrationCommandListBuilder builder)
@@ -681,11 +1005,11 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         /// <summary>
         ///     Generates a SQL fragment for a column definition for the given column metadata.
         /// </summary>
-        /// <param name="schema"> The schema that contains the table, or <c>null</c> to use the default schema. </param>
+        /// <param name="schema"> The schema that contains the table, or <see langword="null"/> to use the default schema. </param>
         /// <param name="table"> The table that contains the column. </param>
         /// <param name="name"> The column name. </param>
         /// <param name="operation"> The column metadata. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to add the SQL fragment. </param>
         protected override void ColumnDefinition(
             [CanBeNull] string schema,
@@ -727,11 +1051,11 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                         autoIncrement = true;
                         break;
                     case "datetime":
-                        if (!_options.ServerVersion.SupportsDateTimeCurrentTimestamp)
+                        if (!_options.ServerVersion.Supports.DateTimeCurrentTimestamp)
                         {
                             throw new InvalidOperationException(
                                 $"Error in {table}.{name}: DATETIME does not support values generated " +
-                                $"on Add or Update in versions lower than {ServerVersion.GetSupport(ServerVersion.DateTimeCurrentTimestampSupportKey)}. Try explicitly setting the column type to TIMESTAMP.");
+                                $"on Add or Update in server version {_options.ServerVersion}. Try explicitly setting the column type to TIMESTAMP.");
                         }
 
                         goto case "timestamp";
@@ -747,11 +1071,11 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                 switch (matchType)
                 {
                     case "datetime":
-                        if (!_options.ServerVersion.SupportsDateTimeCurrentTimestamp)
+                        if (!_options.ServerVersion.Supports.DateTimeCurrentTimestamp)
                         {
                             throw new InvalidOperationException(
                                 $"Error in {table}.{name}: DATETIME does not support values generated " +
-                                $"on Add or Update in versions lower than {ServerVersion.GetSupport(ServerVersion.DateTimeCurrentTimestampSupportKey)}. Try explicitly setting the column type to TIMESTAMP.");
+                                $"on Add or Update in server version {_options.ServerVersion}. Try explicitly setting the column type to TIMESTAMP.");
                         }
 
                         goto case "timestamp";
@@ -795,7 +1119,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                     .Append(" AS ")
                     .Append($"({operation.ComputedColumnSql})");
 
-                if (operation.IsNullable && _options.ServerVersion.SupportsNullableGeneratedColumns)
+                if (operation.IsStored.GetValueOrDefault())
+                {
+                    builder.Append(" STORED");
+                }
+
+                if (operation.IsNullable && _options.ServerVersion.Supports.NullableGeneratedColumns)
                 {
                     builder.Append(" NULL");
                 }
@@ -834,7 +1163,22 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
 
             builder.Append(operation.IsNullable ? " NULL" : " NOT NULL");
 
-            DefaultValue(operation.DefaultValue, operation.DefaultValueSql, columnType, builder);
+            var isSpatialStoreType = IsSpatialStoreType(columnType);
+
+            if (columnType.IndexOf("blob", StringComparison.OrdinalIgnoreCase) < 0 &&
+                columnType.IndexOf("text", StringComparison.OrdinalIgnoreCase) < 0 &&
+                columnType.IndexOf("json", StringComparison.OrdinalIgnoreCase) < 0 &&
+                !isSpatialStoreType)
+            {
+                DefaultValue(operation.DefaultValue, operation.DefaultValueSql, columnType, builder);
+            }
+
+            var srid = operation[MySqlAnnotationNames.SpatialReferenceSystemId];
+            if (srid is int &&
+                isSpatialStoreType)
+            {
+                builder.Append($" /*!80003 SRID {srid} */");
+            }
         }
 
         protected override string GetColumnType(string schema, string table, string name, ColumnOperation operation, IModel model)
@@ -855,7 +1199,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
                     : columnType.TrimEnd() + " " + characterSetClause;
             }
 
-            var collation = operation[MySqlAnnotationNames.Collation];
+            var collation = operation[MySqlAnnotationNames.Collation] ?? operation.Collation;
             if (collation != null)
             {
                 const string collationClausePattern = @"COLLATE \w+";
@@ -869,12 +1213,6 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             return columnType;
         }
 
-        /// <summary>
-        ///     Generates a SQL fragment for the default constraint of a column.
-        /// </summary>
-        /// <param name="defaultValue"> The default value for the column. </param>
-        /// <param name="defaultValueSql"> The SQL expression to use for the column's default constraint. </param>
-        /// <param name="builder"> The command builder to use to add the SQL fragment. </param>
         protected override void DefaultValue(object defaultValue, string defaultValueSql, string columnType, MigrationCommandListBuilder builder)
         {
             Check.NotNull(builder, nameof(builder));
@@ -898,7 +1236,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     Generates a SQL fragment for the primary key constraint of a <see cref="CreateTableOperation" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to add the SQL fragment. </param>
         protected override void CreateTablePrimaryKeyConstraint(
             [NotNull] CreateTableOperation operation,
@@ -948,6 +1286,58 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             }
         }
 
+        protected override void PrimaryKeyConstraint(
+            [NotNull] AddPrimaryKeyOperation operation,
+            [CanBeNull] IModel model,
+            [NotNull] MigrationCommandListBuilder builder)
+        {
+            Check.NotNull(operation, nameof(operation));
+            Check.NotNull(builder, nameof(builder));
+
+            if (operation.Name != null)
+            {
+                builder
+                    .Append("CONSTRAINT ")
+                    .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name))
+                    .Append(" ");
+            }
+
+            builder
+                .Append("PRIMARY KEY ");
+
+            IndexTraits(operation, model, builder);
+
+            builder.Append("(")
+                .Append(ColumnListWithIndexPrefixLength(operation, operation.Columns))
+                .Append(")");
+        }
+
+        protected override void UniqueConstraint(
+            [NotNull] AddUniqueConstraintOperation operation,
+            [CanBeNull] IModel model,
+            [NotNull] MigrationCommandListBuilder builder)
+        {
+            Check.NotNull(operation, nameof(operation));
+            Check.NotNull(builder, nameof(builder));
+
+            if (operation.Name != null)
+            {
+                builder
+                    .Append("CONSTRAINT ")
+                    .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Name))
+                    .Append(" ");
+            }
+
+            builder
+                .Append("UNIQUE ");
+
+            IndexTraits(operation, model, builder);
+
+            builder.Append("(")
+                .Append(ColumnListWithIndexPrefixLength(operation, operation.Columns))
+                .Append(")");
+        }
+
         protected override void Generate(AddPrimaryKeyOperation operation, IModel model, MigrationCommandListBuilder builder, bool terminate = true)
         {
             Check.NotNull(operation, nameof(operation));
@@ -971,28 +1361,78 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             EndStatement(builder);
         }
 
-        protected override void Generate(DropPrimaryKeyOperation operation, IModel model, MigrationCommandListBuilder builder, bool terminate = true)
+        protected override void Generate(
+            DropPrimaryKeyOperation operation,
+            IModel model,
+            MigrationCommandListBuilder builder,
+            bool terminate = true)
+            => Generate(
+                new MySqlDropPrimaryKeyAndRecreateForeignKeysOperation
+                {
+                    IsDestructiveChange = operation.IsDestructiveChange,
+                    Name = operation.Name,
+                    Schema = operation.Schema,
+                    Table = operation.Table,
+                    RecreateForeignKeys = false,
+                },
+                model,
+                builder,
+                terminate);
+
+        protected virtual void Generate(
+            MySqlDropPrimaryKeyAndRecreateForeignKeysOperation operation,
+            IModel model,
+            MigrationCommandListBuilder builder,
+            bool terminate = true)
         {
             Check.NotNull(operation, nameof(operation));
             Check.NotNull(builder, nameof(builder));
 
-            builder.Append($"CALL POMELO_BEFORE_DROP_PRIMARY_KEY({_stringTypeMapping.GenerateSqlLiteral(operation.Schema)}, {_stringTypeMapping.GenerateSqlLiteral(operation.Table)});");
+            void DropPrimaryKey()
+            {
+                builder.Append($"CALL POMELO_BEFORE_DROP_PRIMARY_KEY({_stringTypeMapping.GenerateSqlLiteral(operation.Schema)}, {_stringTypeMapping.GenerateSqlLiteral(operation.Table)});")
+                    .AppendLine()
+                    .Append("ALTER TABLE ")
+                    .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema))
+                    .Append(" DROP PRIMARY KEY");
 
-            builder.AppendLine();
-            builder
-                .Append("ALTER TABLE ")
-                .Append(Dependencies.SqlGenerationHelper.DelimitIdentifier(operation.Table, operation.Schema))
-                .Append(" DROP PRIMARY KEY;")
-                .AppendLine();
+                if (terminate)
+                {
+                    builder.AppendLine(Dependencies.SqlGenerationHelper.StatementTerminator);
+                    EndStatement(builder);
+                }
+            }
 
-            EndStatement(builder);
+            // A foreign key might reuse the primary key for its own purposes and prohibit its deletion,
+            // if the foreign key columns are listed as the first columns and in the same order as in the foreign key (#678).
+            // We therefore drop and later recreate all foreign keys to ensure, that no other dependencies on the
+            // primary key exist, if explicitly requested by the user via `MySqlMigrationBuilderExtensions.DropPrimaryKey()`.
+            if (operation.RecreateForeignKeys)
+            {
+                TemporarilyDropForeignKeys(
+                    model,
+                    builder,
+                    operation.Schema,
+                    operation.Table,
+                    // model.GetRelationalModel()
+                    //     .FindTable(operation.Table, operation.Schema)
+                    //     ?.Columns
+                    //     .Select(c => c.Name)
+                    //     .ToArray(),
+                    null,
+                    DropPrimaryKey);
+            }
+            else
+            {
+                DropPrimaryKey();
+            }
         }
 
         /// <summary>
         ///     Generates a SQL fragment for a foreign key constraint of an <see cref="AddForeignKeyOperation" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to add the SQL fragment. </param>
         protected override void ForeignKeyConstraint(
             AddForeignKeyOperation operation,
@@ -1008,7 +1448,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
         ///     <see cref="AddPrimaryKeyOperation" />, or <see cref="AddUniqueConstraintOperation" />.
         /// </summary>
         /// <param name="operation"> The operation. </param>
-        /// <param name="model"> The target model which may be <c>null</c> if the operations exist without a model. </param>
+        /// <param name="model"> The target model which may be <see langword="null"/> if the operations exist without a model. </param>
         /// <param name="builder"> The command builder to use to add the SQL fragment. </param>
         protected override void IndexTraits(MigrationOperation operation, IModel model,
             MigrationCommandListBuilder builder)
@@ -1027,6 +1467,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             {
                 builder.Append("SPATIAL ");
             }
+        }
+
+        protected override void IndexOptions(CreateIndexOperation operation, IModel model, MigrationCommandListBuilder builder)
+        {
+            // The base implementation supports index filters in form of a WHERE clause.
+            // This is not supported by MySQL.
         }
 
         /// <summary>
@@ -1049,6 +1495,18 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
             }
         }
 
+        private string ColumnListWithIndexPrefixLength(MigrationOperation operation, string[] columns)
+            => operation[MySqlAnnotationNames.IndexPrefixLength] is int[] prefixValues
+                ? ColumnList(
+                    columns,
+                    (c, i) => prefixValues.Length > i && prefixValues[i] > 0
+                        ? $"({prefixValues[i]})"
+                        : null)
+                : ColumnList(columns);
+
+        protected virtual string ColumnList([NotNull] string[] columns, Func<string, int, string> columnPostfix)
+            => string.Join(", ", columns.Select((c, i) => Dependencies.SqlGenerationHelper.DelimitIdentifier(c) + columnPostfix?.Invoke(c, i)));
+
         private string IntegerConstant(long value)
             => string.Format(CultureInfo.InvariantCulture, "{0}", value);
 
@@ -1062,5 +1520,8 @@ namespace Pomelo.EntityFrameworkCore.MySql.Migrations
 
             return source.Substring(0, maxLength);
         }
+
+        private static bool IsSpatialStoreType(string storeType)
+            => _spatialStoreTypes.Contains(storeType);
     }
 }

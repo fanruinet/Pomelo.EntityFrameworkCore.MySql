@@ -1,17 +1,17 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <root>
-  <!-- 
-    Microsoft ResX Schema 
-    
+  <!--
+    Microsoft ResX Schema
+
     Version 2.0
-    
-    The primary goals of this format is to allow a simple XML format 
-    that is mostly human readable. The generation and parsing of the 
-    various data types are done through the TypeConverter classes 
+
+    The primary goals of this format is to allow a simple XML format
+    that is mostly human readable. The generation and parsing of the
+    various data types are done through the TypeConverter classes
     associated with the data types.
-    
+
     Example:
-    
+
     ... ado.net/XML headers & schema ...
     <resheader name="resmimetype">text/microsoft-resx</resheader>
     <resheader name="version">2.0</resheader>
@@ -26,36 +26,36 @@
         <value>[base64 mime encoded string representing a byte array form of the .NET Framework object]</value>
         <comment>This is a comment</comment>
     </data>
-                
-    There are any number of "resheader" rows that contain simple 
+
+    There are any number of "resheader" rows that contain simple
     name/value pairs.
-    
-    Each data row contains a name, and value. The row also contains a 
-    type or mimetype. Type corresponds to a .NET class that support 
-    text/value conversion through the TypeConverter architecture. 
-    Classes that don't support this are serialized and stored with the 
+
+    Each data row contains a name, and value. The row also contains a
+    type or mimetype. Type corresponds to a .NET class that support
+    text/value conversion through the TypeConverter architecture.
+    Classes that don't support this are serialized and stored with the
     mimetype set.
-    
-    The mimetype is used for serialized objects, and tells the 
-    ResXResourceReader how to depersist the object. This is currently not 
+
+    The mimetype is used for serialized objects, and tells the
+    ResXResourceReader how to depersist the object. This is currently not
     extensible. For a given mimetype the value must be set accordingly:
-    
-    Note - application/x-microsoft.net.object.binary.base64 is the format 
-    that the ResXResourceWriter will generate, however the reader can 
+
+    Note - application/x-microsoft.net.object.binary.base64 is the format
+    that the ResXResourceWriter will generate, however the reader can
     read any of the formats listed below.
-    
+
     mimetype: application/x-microsoft.net.object.binary.base64
-    value   : The object must be serialized with 
+    value   : The object must be serialized with
             : System.Runtime.Serialization.Formatters.Binary.BinaryFormatter
             : and then encoded with base64 encoding.
-    
+
     mimetype: application/x-microsoft.net.object.soap.base64
-    value   : The object must be serialized with 
+    value   : The object must be serialized with
             : System.Runtime.Serialization.Formatters.Soap.SoapFormatter
             : and then encoded with base64 encoding.
 
     mimetype: application/x-microsoft.net.object.bytearray.base64
-    value   : The object must be serialized into a byte array 
+    value   : The object must be serialized into a byte array
             : using a System.ComponentModel.TypeConverter
             : and then encoded with base64 encoding.
     -->
@@ -118,7 +118,7 @@
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
   <data name="IdentityBadType" xml:space="preserve">
-    <value>Identity value generation cannot be used for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Identity value generation can only be used with signed integer, DateTime, and DateTimeOffset properties.</value>
+    <value>Identity value generation cannot be used for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Identity value generation can only be used with integer, DateTime, and DateTimeOffset properties.</value>
   </data>
   <data name="UnqualifiedDataType" xml:space="preserve">
     <value>Data type '{dataType}' is not supported in this form. Either specify the length explicitly in the type name, for example as '{dataType}(16)', or remove the data type and use APIs such as HasMaxLength to allow EF choose the data type.</value>
@@ -127,10 +127,10 @@
     <value>Data type '{dataType}' for property '{property}' is not supported in this form. Either specify the length explicitly in the type name, for example as '{dataType}(16)', or remove the data type and use APIs such as HasMaxLength to allow EF choose the data type.</value>
   </data>
   <data name="SequenceBadType" xml:space="preserve">
-    <value>SQL Server sequences cannot be used to generate values for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Sequences can only be used with integer properties.</value>
+    <value>MySQL sequences cannot be used to generate values for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Sequences can only be used with integer properties.</value>
   </data>
   <data name="IndexTableRequired" xml:space="preserve">
-    <value>SQL Server requires the table name to be specified for rename index operations. Specify table name in the call to MigrationBuilder.RenameIndex.</value>
+    <value>MySQL requires the table name to be specified for rename index operations. Specify table name in the call to MigrationBuilder.RenameIndex.</value>
   </data>
   <data name="AlterMemoryOptimizedTable" xml:space="preserve">
     <value>To set memory-optimized on a table on or off the table needs to be dropped and recreated.</value>
@@ -146,7 +146,7 @@
     <comment>Warning MySqlEventId.DecimalTypeDefaultWarning string string</comment>
   </data>
   <data name="LogByteIdentityColumn" xml:space="preserve">
-    <value>The property '{property}' on entity type '{entityType}' is of type 'byte', but is set up to use a SQL Server identity column. This requires that values starting at 255 and counting down will be used for temporary key values. A temporary key value is needed for every entity inserted in a single call to 'SaveChanges'. Care must be taken that these values do not collide with real key values.</value>
+    <value>The property '{property}' on entity type '{entityType}' is of type 'byte', but is set up to use a MySQL identity column. This requires that values starting at 255 and counting down will be used for temporary key values. A temporary key value is needed for every entity inserted in a single call to 'SaveChanges'. Care must be taken that these values do not collide with real key values.</value>
     <comment>Warning MySqlEventId.ByteIdentityColumnWarning string string</comment>
   </data>
   <data name="NonKeyValueGeneration" xml:space="preserve">
@@ -219,8 +219,8 @@
   <data name="InvalidTableToIncludeInScaffolding" xml:space="preserve">
     <value>The specified table '{table}' is not valid. Specify tables using the format '[schema].[table]'.</value>
   </data>
-  <data name="FreeTextFunctionOnClient" xml:space="preserve">
-    <value>The 'FreeText' method is not supported because the query has switched to client-evaluation. Inspect the log to determine which query expressions are triggering client-evaluation.</value>
+  <data name="FunctionOnClient" xml:space="preserve">
+    <value>The '{methodName}' method is not supported because the query has switched to client-evaluation. Inspect the log to determine which query expressions are triggering client-evaluation.</value>
   </data>
   <data name="ComputedBadType" xml:space="preserve">
     <value>Computed value generation cannot be used for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Computed value generation can only be used with DateTime and DateTimeOffset properties.</value>

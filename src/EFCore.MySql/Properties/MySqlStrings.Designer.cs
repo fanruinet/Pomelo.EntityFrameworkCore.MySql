@@ -22,7 +22,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
             = new ResourceManager("Pomelo.EntityFrameworkCore.MySql.Properties.MySqlStrings", typeof(MySqlStrings).GetTypeInfo().Assembly);
 
         /// <summary>
-        ///     Identity value generation cannot be used for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Identity value generation can only be used with signed integer, DateTime, and DateTimeOffset properties.
+        ///     Identity value generation cannot be used for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Identity value generation can only be used with integer, DateTime, and DateTimeOffset properties.
         /// </summary>
         public static string IdentityBadType([CanBeNull] object property, [CanBeNull] object entityType, [CanBeNull] object propertyType)
             => string.Format(
@@ -46,7 +46,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
                 dataType, property);
 
         /// <summary>
-        ///     SQL Server sequences cannot be used to generate values for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Sequences can only be used with integer properties.
+        ///     MySQL sequences cannot be used to generate values for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Sequences can only be used with integer properties.
         /// </summary>
         public static string SequenceBadType([CanBeNull] object property, [CanBeNull] object entityType, [CanBeNull] object propertyType)
             => string.Format(
@@ -54,7 +54,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
                 property, entityType, propertyType);
 
         /// <summary>
-        ///     SQL Server requires the table name to be specified for rename index operations. Specify table name in the call to MigrationBuilder.RenameIndex.
+        ///     MySQL requires the table name to be specified for rename index operations. Specify table name in the call to MigrationBuilder.RenameIndex.
         /// </summary>
         public static string IndexTableRequired
             => GetString("IndexTableRequired");
@@ -124,10 +124,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
                 table);
 
         /// <summary>
-        ///     The 'FreeText' method is not supported because the query has switched to client-evaluation. Inspect the log to determine which query expressions are triggering client-evaluation.
+        ///     The '{methodName}' method is not supported because the query has switched to client-evaluation. Inspect the log to determine which query expressions are triggering client-evaluation.
         /// </summary>
-        public static string FreeTextFunctionOnClient
-            => GetString("FreeTextFunctionOnClient");
+        public static string FunctionOnClient([CanBeNull] object methodName)
+            => string.Format(
+                GetString("FunctionOnClient", nameof(methodName)),
+                methodName);
 
         /// <summary>
         ///     Computed value generation cannot be used for the property '{property}' on entity type '{entityType}' because the property type is '{propertyType}'. Computed value generation can only be used with DateTime and DateTimeOffset properties.
@@ -194,7 +196,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
         }
 
         /// <summary>
-        ///     The property '{property}' on entity type '{entityType}' is of type 'byte', but is set up to use a SQL Server identity column. This requires that values starting at 255 and counting down will be used for temporary key values. A temporary key value is needed for every entity inserted in a single call to 'SaveChanges'. Care must be taken that these values do not collide with real key values.
+        ///     The property '{property}' on entity type '{entityType}' is of type 'byte', but is set up to use a MySQL identity column. This requires that values starting at 255 and counting down will be used for temporary key values. A temporary key value is needed for every entity inserted in a single call to 'SaveChanges'. Care must be taken that these values do not collide with real key values.
         /// </summary>
         public static EventDefinition<string, string> LogByteIdentityColumn([NotNull] IDiagnosticsLogger logger)
         {

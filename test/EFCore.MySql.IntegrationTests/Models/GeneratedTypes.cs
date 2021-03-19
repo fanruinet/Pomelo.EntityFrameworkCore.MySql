@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
-using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Tests;
 
 namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Models
 {
@@ -11,7 +11,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Models
     {
         public static void OnModelCreating(ModelBuilder modelBuilder)
         {
-            if (!AppConfig.ServerVersion.SupportsJson)
+            if (!AppConfig.ServerVersion.Supports.Json)
             {
                 return;
             }
@@ -23,17 +23,29 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Models
 
                 entity.Property(m => m.Name)
                     .ValueGeneratedOnAddOrUpdate()
-                    .HasColumnType(@"VARCHAR(63) GENERATED ALWAYS AS (`Names` ->> ""$[0]"") VIRTUAL");
+                    .HasColumnType(@"VARCHAR(63)")
+                    .HasComputedColumnSql(@"JSON_UNQUOTE(JSON_EXTRACT(`Names`, ""$[0]""))");
 
                 entity.Property(m => m.Email)
                     .ValueGeneratedOnAddOrUpdate()
-                    .HasColumnType(@"VARCHAR(63) GENERATED ALWAYS AS (`ContactInfo` ->> ""$.Email"") VIRTUAL");
+                    .HasColumnType(@"VARCHAR(63)")
+                    .HasComputedColumnSql(@"JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, ""$.Email""))");
 
                 entity.Property(m => m.Address)
                     .ValueGeneratedOnAddOrUpdate()
-                    .HasColumnType(@"VARCHAR(63) GENERATED ALWAYS AS (CONCAT_WS(', ',	`ContactInfo` ->> ""$.Address"", `ContactInfo` ->> ""$.City"", `ContactInfo` ->> ""$.State"", `ContactInfo` ->> ""$.Zip"")) STORED");
+                    .HasColumnType(@"VARCHAR(63)")
+                    .HasComputedColumnSql(@"CONCAT_WS(', ',	JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, ""$.Address"")), JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, ""$.City"")), JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, ""$.State"")), JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, ""$.Zip"")))");
             });
         }
+    }
+
+    public class ContactInfo
+    {
+        public string Email { get; set; }
+        public string Address { get; set; }
+        public string City { get; set; }
+        public string State { get; set; }
+        public string Zip { get; set; }
     }
 
     public class GeneratedContact
@@ -46,9 +58,9 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Models
 
         public string Address { get; set; }
 
-        public JsonObject<List<string>> Names { get; set; }
+        public List<string> Names { get; set; }
 
-        public JsonObject<Dictionary<string, string>> ContactInfo { get; set; }
+        public ContactInfo ContactInfo { get; set; }
     }
 
     public class GeneratedTime

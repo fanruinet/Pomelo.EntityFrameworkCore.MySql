@@ -4,8 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Models;
 using Microsoft.EntityFrameworkCore;
-using MySql.Data.MySqlClient;
-using Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Tests.Attributes;
+using MySqlConnector;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+using Pomelo.EntityFrameworkCore.MySql.Tests.TestUtilities.Attributes;
 using Pomelo.EntityFrameworkCore.MySql.Storage;
 using Xunit;
 
@@ -13,7 +14,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Tests.Models
 {
 	public class GeneratedTypesTest
 	{
-        [SupportedServerVersionFact(ServerVersion.JsonSupportKey, Skip = "Version of MySQL/MariaDB does not support JSON")]
+        [SupportedServerVersionCondition(nameof(ServerVersionSupport.Json), Skip = "Version of MySQL/MariaDB does not support JSON")]
 		public async Task TestGeneratedContact()
 		{
 			const string email = "bob@example.com";
@@ -42,15 +43,15 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Tests.Models
 
 				var gen = new GeneratedContact
 				{
-					Names = new JsonObject<List<string>>(new List<string> {"Bob", "Bobby"}),
-					ContactInfo = new JsonObject<Dictionary<string, string>>(new Dictionary<string, string>
+					Names = new List<string> {"Bob", "Bobby"},
+					ContactInfo = new ContactInfo
 					{
-						{"Email", email},
-						{"Address", address},
-						{"City", city},
-						{"State", state},
-						{"Zip", zip},
-					}),
+						Email = email,
+						Address = address,
+						City = city,
+						State = state,
+						Zip = zip,
+					},
 				};
 
 				// test the entity after saving to the db

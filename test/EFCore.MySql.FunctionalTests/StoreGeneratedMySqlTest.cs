@@ -4,8 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.EntityFrameworkCore.TestUtilities;
-using Microsoft.Extensions.DependencyInjection;
-using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Tests;
 
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
 {
@@ -87,11 +86,11 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
                         b.Property(e => e.OnUpdateIgnoreBeforeThrowAfter).HasMaxLength(500).HasDefaultValue("Rabbit");
                         b.Property(e => e.OnUpdateThrowBeforeThrowAfter).HasMaxLength(500).HasDefaultValue("Rabbit");
                     });
-                
+
                 modelBuilder.Entity<WithBackingFields>(
                     b =>
                     {
-                        if (AppConfig.ServerVersion.SupportsGeneratedColumns)
+                        if (AppConfig.ServerVersion.Supports.GeneratedColumns)
                         {
                             b.Property(e => e.NullableAsNonNullable).HasComputedColumnSql("1");
                             b.Property(e => e.NonNullableAsNullable).HasComputedColumnSql("1");
@@ -102,13 +101,26 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
                             b.Property(e => e.NonNullableAsNullable).HasDefaultValue(1);
                         }
                     });
-                
+
                 modelBuilder.Entity<WithNullableBackingFields>(
                     b =>
                     {
-                        b.Property(e => e.NullableBackedBool).HasDefaultValue(true);
-                        b.Property(e => e.NullableBackedInt).HasDefaultValue(-1);
+                        b.Property(e => e.NullableBackedBoolTrueDefault).HasDefaultValue(true);
+                        b.Property(e => e.NullableBackedIntNonZeroDefault).HasDefaultValue(-1);
+                        b.Property(e => e.NullableBackedBoolFalseDefault).HasDefaultValue(false);
+                        b.Property(e => e.NullableBackedIntZeroDefault).HasDefaultValue(0);
                     });
+
+                modelBuilder.Entity<WithObjectBackingFields>(
+                    b =>
+                    {
+                        b.Property(e => e.NullableBackedBoolTrueDefault).HasDefaultValue(true);
+                        b.Property(e => e.NullableBackedIntNonZeroDefault).HasDefaultValue(-1);
+                        b.Property(e => e.NullableBackedBoolFalseDefault).HasDefaultValue(false);
+                        b.Property(e => e.NullableBackedIntZeroDefault).HasDefaultValue(0);
+                    });
+
+                modelBuilder.Entity<NonStoreGenDependent>().Property(e => e.HasTemp).HasDefaultValue(777);
 
                 base.OnModelCreating(modelBuilder, context);
             }

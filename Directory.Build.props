@@ -1,33 +1,30 @@
 <Project>
-  <!-- HACK: Our test projects don't match Arcade's conventions -->
-  <PropertyGroup Condition="'$(IsUnitTestProject)' == ''">
-    <IsUnitTestProject Condition="$(MSBuildProjectName.EndsWith('.FunctionalTests'))">True</IsUnitTestProject>
-    <IsUnitTestProject Condition="$(MSBuildProjectName.EndsWith('.IntegrationTests'))">True</IsUnitTestProject>
-  </PropertyGroup>
-
-  <Import Project="Sdk.props" Sdk="Microsoft.DotNet.Arcade.Sdk" />
-  <Import Project="eng\Development.props" Condition="Exists('eng\Development.props')" />
+  <Import Project="Versions.props" />
+  <Import Project="Development.props" Condition="Exists('Development.props')" />
 
   <PropertyGroup>
     <StrongNameKeyId>Pomelo.EntityFrameworkCore.MySql</StrongNameKeyId>
-    <PackageTags>Entity Framework Core MySQL;entity-framework-core-mysql;EF MySQL;EF Core MySQL</PackageTags>
+    <PackageTags>pomelo;mysql;mariadb;Entity Framework Core;entity-framework-core;ef;efcore;ef core;orm;sql</PackageTags>
     <Product>Pomelo.EntityFrameworkCore.MySql</Product>
-    <Authors>Pomelo Foundation</Authors>
+    <Authors>Laurents Meyer, Caleb Lloyd, Yuko Zheng</Authors>
     <Company>Pomelo Foundation</Company>
+    <Copyright>Copyright 2020 © Pomelo Foundation</Copyright>
     <PackageIconUrl>https://avatars3.githubusercontent.com/u/19828814</PackageIconUrl>
     <PackageIcon>icon.png</PackageIcon>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <LangVersion>8.0</LangVersion>
+    <LangVersion>latest</LangVersion>
     <DebugType>portable</DebugType>
+    <SuppressNETCoreSdkPreviewMessage>true</SuppressNETCoreSdkPreviewMessage>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/PomeloFoundation/Pomelo.EntityFrameworkCore.MySql</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>git://github.com/PomeloFoundation/Pomelo.EntityFrameworkCore.MySql</RepositoryUrl>
+    <RepositoryUrl>https://github.com/PomeloFoundation/Pomelo.EntityFrameworkCore.MySql.git</RepositoryUrl>
   </PropertyGroup>
 
   <PropertyGroup>
-    <DefaultNetCoreTargetFramework>netcoreapp3.1</DefaultNetCoreTargetFramework>
-    <DefaultNetStandardTargetFramework>netstandard2.0</DefaultNetStandardTargetFramework>
+    <DefaultNetCoreTargetFramework>net5.0</DefaultNetCoreTargetFramework>
+    <DefaultNetCoreLegacyTargetFramework>netcoreapp5.0</DefaultNetCoreLegacyTargetFramework>
+    <DefaultNetStandardTargetFramework>netstandard2.1</DefaultNetStandardTargetFramework>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -36,7 +33,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\"/>
+    <None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath=""/>
   </ItemGroup>
 
   <ItemGroup>

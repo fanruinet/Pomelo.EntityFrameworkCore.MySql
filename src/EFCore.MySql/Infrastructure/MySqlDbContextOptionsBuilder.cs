@@ -8,7 +8,6 @@ using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore.Storage;
 using Pomelo.EntityFrameworkCore.MySql.Internal;
-using Pomelo.EntityFrameworkCore.MySql.Storage;
 
 // ReSharper disable once CheckNamespace
 namespace Microsoft.EntityFrameworkCore.Infrastructure
@@ -19,24 +18,6 @@ namespace Microsoft.EntityFrameworkCore.Infrastructure
             : base(optionsBuilder)
         {
         }
-
-        /// <summary>
-        ///     Configures the target server version and type.
-        /// </summary>
-        public virtual MySqlDbContextOptionsBuilder ServerVersion(Version version, ServerType type)
-            => WithOption(e => e.WithServerVersion(new ServerVersion(version, type)));
-
-        /// <summary>
-        ///     Configures the target server version and type.
-        /// </summary>
-        public virtual MySqlDbContextOptionsBuilder ServerVersion(string serverVersion)
-            => WithOption(e => e.WithServerVersion(new ServerVersion(serverVersion)));
-
-        /// <summary>
-        ///     Configures the target <see cref="ServerVersion"/>.
-        /// </summary>
-        public virtual MySqlDbContextOptionsBuilder ServerVersion(ServerVersion serverVersion)
-            => WithOption(e => e.WithServerVersion(serverVersion));
 
         /// <summary>
         ///     Configures the Default CharSet Behavior
@@ -61,6 +42,18 @@ namespace Microsoft.EntityFrameworkCore.Infrastructure
         /// </summary>
         public virtual MySqlDbContextOptionsBuilder EnableRetryOnFailure(int maxRetryCount)
             => ExecutionStrategy(c => new MySqlRetryingExecutionStrategy(c, maxRetryCount));
+
+        /// <summary>
+        ///     Configures the context to use the default retrying <see cref="IExecutionStrategy" />.
+        /// </summary>
+        /// <param name="maxRetryCount"> The maximum number of retry attempts. </param>
+        /// <param name="maxRetryDelay"> The maximum delay between retries. </param>
+        /// <param name="errorNumbersToAdd"> Additional error codes that should be considered transient. </param>
+        public virtual MySqlDbContextOptionsBuilder EnableRetryOnFailure(
+            int maxRetryCount,
+            TimeSpan maxRetryDelay,
+            [CanBeNull] ICollection<int> errorNumbersToAdd)
+            => ExecutionStrategy(c => new MySqlRetryingExecutionStrategy(c, maxRetryCount, maxRetryDelay, errorNumbersToAdd));
 
         /// <summary>
         ///     Configures string escaping in SQL query generation to ignore backslashes, and assumes
@@ -105,15 +98,18 @@ namespace Microsoft.EntityFrameworkCore.Infrastructure
             => WithOption(e => e.WithDefaultDataTypeMappings(defaultDataTypeMappings(new MySqlDefaultDataTypeMappings())));
 
         /// <summary>
-        ///     Configures the context to use the default retrying <see cref="IExecutionStrategy" />.
+        ///     Configures the behavior for cases when a schema has been set for an entity. Because
+        ///     MySQL does not support the EF Core concept of schemas, the default is to throw an
+        ///     exception.
         /// </summary>
-        /// <param name="maxRetryCount"> The maximum number of retry attempts. </param>
-        /// <param name="maxRetryDelay"> The maximum delay between retries. </param>
-        /// <param name="errorNumbersToAdd"> Additional error codes that should be considered transient. </param>
-        public virtual MySqlDbContextOptionsBuilder EnableRetryOnFailure(
-            int maxRetryCount,
-            TimeSpan maxRetryDelay,
-            [NotNull] ICollection<int> errorNumbersToAdd)
-            => ExecutionStrategy(c => new MySqlRetryingExecutionStrategy(c, maxRetryCount, maxRetryDelay, errorNumbersToAdd));
+        public virtual MySqlDbContextOptionsBuilder SchemaBehavior(MySqlSchemaBehavior behavior, MySqlSchemaNameTranslator translator = null)
+            => WithOption(e => e.WithSchemaBehavior(behavior, translator));
+
+        /// <summary>
+        ///     Configures the context to optimize `System.Boolean` mapped columns for index usage,
+        ///     by translating `e.BoolColumn` to `BoolColumn = TRUE` and `!e.BoolColumn` to `BoolColumn = FALSE`.
+        /// </summary>
+        public virtual MySqlDbContextOptionsBuilder EnableIndexOptimizedBooleanColumns(bool enable = true)
+            => WithOption(e => e.WithIndexOptimizedBooleanColumns(enable));
     }
 }

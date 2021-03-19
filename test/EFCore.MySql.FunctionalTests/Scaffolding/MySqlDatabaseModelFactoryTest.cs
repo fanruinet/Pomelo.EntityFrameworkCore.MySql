@@ -11,10 +11,15 @@ using Microsoft.Extensions.Logging;
 using Xunit;
 using Microsoft.EntityFrameworkCore.Internal;
 using System.Diagnostics;
+using Microsoft.EntityFrameworkCore.Diagnostics.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Diagnostics.Internal;
 using Microsoft.EntityFrameworkCore.Scaffolding;
 using Microsoft.Extensions.DependencyInjection;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Metadata.Internal;
+using Pomelo.EntityFrameworkCore.MySql.Tests;
+using Pomelo.EntityFrameworkCore.MySql.Tests.TestUtilities.Attributes;
 
 // ReSharper disable InconsistentNaming
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.Scaffolding
@@ -37,12 +42,14 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.Scaffolding
 
             try
             {
-                var logger = new DiagnosticsLogger<DbLoggerCategory.Scaffolding>(
+                var databaseModelFactory = new MySqlDatabaseModelFactory(
+                    new DiagnosticsLogger<DbLoggerCategory.Scaffolding>(
                         Fixture.ListLoggerFactory,
                         new LoggingOptions(),
                         new DiagnosticListener("Fake"),
-                        new MySqlLoggingDefinitions());
-                var databaseModelFactory = new MySqlDatabaseModelFactory(logger, Fixture.ServiceProvider.GetService<IMySqlOptions>());
+                        new MySqlLoggingDefinitions(),
+                        new NullDbContextLogger()),
+                    Fixture.ServiceProvider.GetService<IMySqlOptions>());
 
                 var databaseModel = databaseModelFactory.Create(Fixture.TestStore.ConnectionString,
                     new DatabaseModelFactoryOptions(tables, schemas));
@@ -274,17 +281,19 @@ DROP TABLE PrincipalTable;");
 
         #region ColumnFacets
 
-        [Fact(Skip = "Issue #582")]
+        [Fact]
         public void Column_storetype_is_set()
         {
             Test(
                 @"
 CREATE TABLE StoreType (
-    IntegerProperty integer,
+    /* IntegerProperty int,
     RealProperty real,
     TextProperty text,
-    BlobProperty blob,
-    RandomProperty randomType
+    BlobProperty blob,*/
+    GeometryProperty geometry,
+    PointProperty point/*,
+    RandomProperty randomType*/
 );",
                 Enumerable.Empty<string>(),
                 Enumerable.Empty<string>(),
@@ -292,11 +301,13 @@ CREATE TABLE StoreType (
                     {
                         var columns = dbModel.Tables.Single().Columns;
 
-                        Assert.Equal("integer", columns.Single(c => c.Name == "IntegerProperty").StoreType);
-                        Assert.Equal("real", columns.Single(c => c.Name == "RealProperty").StoreType);
-                        Assert.Equal("text", columns.Single(c => c.Name == "TextProperty").StoreType);
-                        Assert.Equal("blob", columns.Single(c => c.Name == "BlobProperty").StoreType);
-                        Assert.Equal("randomType", columns.Single(c => c.Name == "RandomProperty").StoreType);
+                        //Assert.Equal("integer", columns.Single(c => c.Name == "IntegerProperty").StoreType);
+                        //Assert.Equal("real", columns.Single(c => c.Name == "RealProperty").StoreType);
+                        //Assert.Equal("text", columns.Single(c => c.Name == "TextProperty").StoreType);
+                        //Assert.Equal("blob", columns.Single(c => c.Name == "BlobProperty").StoreType);
+                        Assert.Equal("geometry", columns.Single(c => c.Name == "GeometryProperty").StoreType);
+                        Assert.Equal("point", columns.Single(c => c.Name == "PointProperty").StoreType);
+                        //Assert.Equal("randomType", columns.Single(c => c.Name == "RandomProperty").StoreType);
                     },
                 @"DROP TABLE StoreType;");
         }
@@ -369,6 +380,75 @@ CREATE TABLE DefaultValue (
                 "DROP TABLE DefaultValueClr");
         }
 
+        [Fact]
+        public void Computed_value_virtual()
+            => Test(@"
+CREATE TABLE `ComputedValues` (
+    `Id` int,
+    `A` int NOT NULL,
+    `B` int NOT NULL,
+    `SumOfAAndB` int GENERATED ALWAYS AS (`A` + `B`) VIRTUAL
+);",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var columns = dbModel.Tables.Single().Columns;
+
+                    var column = columns.Single(c => c.Name == "SumOfAAndB");
+                    Assert.Null(column.DefaultValueSql);
+                    Assert.Equal(@"`A` + `B`", column.ComputedColumnSql);
+                    Assert.False(column.IsStored);
+                },
+                @"DROP TABLE `ComputedValues`");
+
+        [Fact]
+        public void Computed_value_stored()
+            => Test(@"
+CREATE TABLE `ComputedValues` (
+    `Id` int,
+    `A` int NOT NULL,
+    `B` int NOT NULL,
+    `SumOfAAndB` int GENERATED ALWAYS AS (`A` + `B`) STORED
+);",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var columns = dbModel.Tables.Single().Columns;
+
+                    var column = columns.Single(c => c.Name == "SumOfAAndB");
+                    Assert.Null(column.DefaultValueSql);
+                    Assert.Equal(@"`A` + `B`", column.ComputedColumnSql);
+                    Assert.True(column.IsStored);
+                },
+                @"DROP TABLE `ComputedValues`");
+
+        [ConditionalFact]
+        [SupportedServerVersionCondition(nameof(ServerVersionSupport.AlternativeDefaultExpression))]
+        public void Default_value_curdate_mariadb()
+        {
+            // MariaDB allows to use `curdate()` as a default value, while MySQL doesn't.
+            Test(
+                @"
+CREATE TABLE `IceCreams` (
+    `IceCreamId` int,
+    `Name` varchar(255) NOT NULL,
+    `BestServedBefore` datetime DEFAULT curdate()
+);",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var columns = dbModel.Tables.Single()
+                        .Columns;
+
+                    var column = columns.Single(c => c.Name == "BestServedBefore");
+                    Assert.Equal(@"curdate()", column.DefaultValueSql);
+                },
+                @"DROP TABLE `IceCreams`");
+        }
+
         #endregion
 
         #region PrimaryKeyFacets
@@ -427,14 +507,73 @@ CREATE TABLE PrimaryKeyName (
                 Enumerable.Empty<string>(),
                 Enumerable.Empty<string>(),
                 dbModel =>
-                    {
-                        var pk = dbModel.Tables.Single().PrimaryKey;
+                {
+                    var pk = dbModel.Tables.Single().PrimaryKey;
 
-                        Assert.Equal("PrimaryKeyName", pk.Table.Name);
-                        Assert.Equal("PK", pk.Name);
-                        Assert.Equal(new List<string> { "Id" }, pk.Columns.Select(ic => ic.Name).ToList());
-                    },
+                    Assert.Equal("PrimaryKeyName", pk.Table.Name);
+                    Assert.Equal("PK", pk.Name);
+                    Assert.Equal(new List<string> { "Id" }, pk.Columns.Select(ic => ic.Name).ToList());
+                },
                 @"DROP TABLE PrimaryKeyName;");
+        }
+
+        [Fact]
+        public void Prefix_lengths_for_primary_key()
+        {
+            Test(
+                @"
+CREATE TABLE `IceCreams` (
+    `Brand` longtext NOT NULL,
+    `Name` varchar(255) NOT NULL,
+    PRIMARY KEY (`Name`, `Brand`(20))
+);",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var pk = dbModel.Tables.Single().PrimaryKey;
+
+                    Assert.Equal("IceCreams", pk.Table.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(2, pk.Columns.Count);
+                    Assert.Equal("Name", pk.Columns[0].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal("Brand", pk.Columns[1].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(new [] { 0, 20 }, pk.FindAnnotation(MySqlAnnotationNames.IndexPrefixLength)?.Value);
+                },
+                @"DROP TABLE IF EXISTS `IceCreams`;");
+        }
+
+        [Fact]
+        public void Column_srid_value_is_set()
+        {
+            Test(
+                @"
+CREATE TABLE `IceCreamShop` (
+    `IceCreamShopId` int NOT NULL,
+    `Location` geometry NOT NULL /*!80003 SRID 0 */,
+    PRIMARY KEY (`IceCreamShopId`)
+);",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var columns = dbModel.Tables.Single().Columns;
+
+                    if (AppConfig.ServerVersion.Supports.SpatialReferenceSystemRestrictedColumns)
+                    {
+                        Assert.Equal(
+                            0, columns.Single(c => c.Name == "Location")
+                                .FindAnnotation(MySqlAnnotationNames.SpatialReferenceSystemId)
+                                ?.Value);
+                    }
+                    else
+                    {
+                        Assert.Null(
+                            columns.Single(c => c.Name == "Location")
+                                .FindAnnotation(MySqlAnnotationNames.SpatialReferenceSystemId)
+                                ?.Value);
+                    }
+                },
+                @"DROP TABLE IF EXISTS `IceCreamShop`;");
         }
 
         #endregion
@@ -540,6 +679,152 @@ CREATE UNIQUE INDEX IX_UNIQUE on UniqueIndex (Id2);",
                         Assert.Equal(new List<string> { "Id2" }, index.Columns.Select(ic => ic.Name).ToList());
                     },
                 @"DROP TABLE UniqueIndex;");
+        }
+
+        [Fact]
+        public void Prefix_lengths_for_index()
+        {
+            Test(
+                @"
+CREATE TABLE `IceCreams` (
+    `IceCreamId` int NOT NULL,
+    `Brand` longtext NOT NULL,
+    `Name` varchar(255) NOT NULL,
+    PRIMARY KEY (`IceCreamId`)
+);
+
+CREATE INDEX `IX_IceCreams_Brand_Name` ON `IceCreams` (`Name`, `Brand`(20));
+",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var index = Assert.Single(dbModel.Tables.Single().Indexes);
+
+                    Assert.Equal("IceCreams", index.Table.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal("IX_IceCreams_Brand_Name", index.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(2, index.Columns.Count);
+                    Assert.Equal("Name", index.Columns[0].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal("Brand", index.Columns[1].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(new [] { 0, 20 }, index.FindAnnotation(MySqlAnnotationNames.IndexPrefixLength)?.Value);
+                },
+                @"DROP TABLE IF EXISTS `IceCreams`;");
+        }
+
+        [Fact]
+        public void Prefix_lengths_for_multiple_indexes_same_colums()
+        {
+            Test(
+                @"
+CREATE TABLE `IceCreams` (
+    `IceCreamId` int NOT NULL,
+    `Brand` varchar(255) NOT NULL,
+    `Name` varchar(255) NOT NULL,
+    PRIMARY KEY (`IceCreamId`)
+);
+
+CREATE INDEX `IX_IceCreams_Brand_Name_1` ON `IceCreams` (`Name`, `Brand`(20));
+CREATE UNIQUE INDEX `IX_IceCreams_Brand_Name_2` ON `IceCreams` (`Brand`(40), `Name`(120));
+",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var index = Assert.Single(dbModel.Tables.Single().Indexes);
+
+                    Assert.Equal("IceCreams", index.Table.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal("IX_IceCreams_Brand_Name_1", index.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.True(index.IsUnique);
+                    Assert.Equal(2, index.Columns.Count);
+                    Assert.Equal("Name", index.Columns[0].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal("Brand", index.Columns[1].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(new [] { 0, 40 }, index[MySqlAnnotationNames.IndexPrefixLength]);
+                },
+                @"DROP TABLE IF EXISTS `IceCreams`;");
+        }
+
+        [Fact]
+        public void Prefix_lengths_for_multiple_indexes_same_columns_without_prefix_lengths()
+        {
+            Test(
+                @"
+CREATE TABLE `IceCreams` (
+    `IceCreamId` int NOT NULL,
+    `Brand` varchar(255) NOT NULL,
+    `Name` varchar(255) NOT NULL,
+    PRIMARY KEY (`IceCreamId`)
+);
+
+CREATE INDEX `IX_IceCreams_Brand_Name_1` ON `IceCreams` (`Name`(120), `Brand`(20));
+CREATE UNIQUE INDEX `IX_IceCreams_Brand_Name_2` ON `IceCreams` (`Brand`, `Name`);
+",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var index = Assert.Single(dbModel.Tables.Single().Indexes);
+
+                    Assert.Equal("IceCreams", index.Table.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal("IX_IceCreams_Brand_Name_1", index.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.True(index.IsUnique);
+                    Assert.Equal(2, index.Columns.Count);
+                    Assert.Equal("Name", index.Columns[0].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal("Brand", index.Columns[1].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Null(index[MySqlAnnotationNames.IndexPrefixLength]);
+                },
+                @"DROP TABLE IF EXISTS `IceCreams`;");
+        }
+
+        [Fact]
+        public void Set_fulltext_for_fulltext_index()
+        {
+            Test(
+                @"
+CREATE TABLE `IceCreams` (
+    `IceCreamId` int NOT NULL,
+    `Name` varchar(255) NOT NULL,
+    PRIMARY KEY (`IceCreamId`)
+);
+
+CREATE FULLTEXT INDEX `IX_IceCreams_Name` ON `IceCreams` (`Name`);",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var index = Assert.Single(dbModel.Tables.Single().Indexes);
+
+                    Assert.Equal("IceCreams", index.Table.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(1, index.Columns.Count);
+                    Assert.Equal("Name", index.Columns[0].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(true, index.FindAnnotation(MySqlAnnotationNames.FullTextIndex)?.Value);
+                },
+                @"DROP TABLE IF EXISTS `IceCreams`;");
+        }
+
+        [Fact]
+        public void Set_spatial_for_spatial_index()
+        {
+            Test(
+                @"
+CREATE TABLE `IceCreamShop` (
+    `IceCreamShopId` int NOT NULL,
+    `Location` geometry NOT NULL /*!80003 SRID 0 */,
+    PRIMARY KEY (`IceCreamShopId`)
+);
+
+CREATE SPATIAL INDEX `IX_IceCreams_Location` ON `IceCreamShop` (`Location`);",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var index = Assert.Single(dbModel.Tables.Single().Indexes);
+
+                    Assert.Equal("IceCreamShop", index.Table.Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(1, index.Columns.Count);
+                    Assert.Equal("Location", index.Columns[0].Name, StringComparer.OrdinalIgnoreCase);
+                    Assert.Equal(true, index.FindAnnotation(MySqlAnnotationNames.SpatialIndex)?.Value);
+                },
+                @"DROP TABLE IF EXISTS `IceCreamShop`;");
         }
 
         #endregion
@@ -731,6 +1016,48 @@ DROP TABLE DependentTable;
 DROP TABLE PrincipalTable;");
         }
 
+        [Fact]
+        public void Ensure_constraints_scaffold_with_case_mismatch()
+        {
+            // The lower case table reference to a mixed cased table will only be accepted under certain conditions
+            // (lower_case_table_names <> 0).
+            Test(
+                @"
+CREATE TABLE `PrincipalTable` (
+  `Id` INT NOT NULL,
+  PRIMARY KEY (`Id`));
+
+set @sql = concat('
+CREATE TABLE `DependentTable` (
+  `Id` INT NOT NULL,
+  `ForeignKeyId` INT NOT NULL,
+  PRIMARY KEY (`Id`),
+  CONSTRAINT `ForeignKey_Id`
+    FOREIGN KEY (`ForeignKeyId`)
+    REFERENCES `', IF(@@lower_case_table_names <> 0, LOWER('PrincipalTable'), 'PrincipalTable'), '` (`Id`)
+)');
+
+PREPARE dynamic_statement FROM @sql;
+EXECUTE dynamic_statement;
+DEALLOCATE PREPARE dynamic_statement;",
+                Enumerable.Empty<string>(),
+                Enumerable.Empty<string>(),
+                dbModel =>
+                {
+                    var principal = dbModel.Tables.FirstOrDefault(t => string.Equals(t.Name, "PrincipalTable", StringComparison.OrdinalIgnoreCase));
+                    var dependent = dbModel.Tables.FirstOrDefault(t => string.Equals(t.Name, "DependentTable", StringComparison.OrdinalIgnoreCase));
+
+                    Assert.NotNull(principal);
+                    Assert.NotNull(dependent);
+
+                    Assert.Contains(dependent.ForeignKeys, t => t.PrincipalTable.Name == principal.Name);
+                },
+                @"
+DROP TABLE DependentTable;
+DROP TABLE PrincipalTable;"
+            );
+        }
+
         #endregion
 
         #region Warnings
@@ -817,7 +1144,7 @@ DROP TABLE PrincipalTable;");
 
         #endregion
 
-        public class MySqlDatabaseModelFixture : SharedStoreFixtureBase<DbContext>
+        public class MySqlDatabaseModelFixture : SharedStoreFixtureBase<PoolableDbContext>
         {
             protected override string StoreName { get; } = nameof(MySqlDatabaseModelFactoryTest);
             protected override ITestStoreFactory TestStoreFactory => MySqlTestStoreFactory.Instance;

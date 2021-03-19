@@ -174,10 +174,10 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Migrations
                     TypeByteArray255 = table.Column<byte[]>(maxLength: 255, nullable: false),
                     TypeByteArray255N = table.Column<byte[]>(maxLength: 255, nullable: true),
                     TypeByteArrayN = table.Column<byte[]>(nullable: true),
-                    TypeJsonArray = table.Column<JsonObject<List<string>>>(nullable: false),
-                    TypeJsonArrayN = table.Column<JsonObject<List<string>>>(nullable: true),
-                    TypeJsonObject = table.Column<JsonObject<Dictionary<string, string>>>(nullable: false),
-                    TypeJsonObjectN = table.Column<JsonObject<Dictionary<string, string>>>(nullable: true),
+                    TypeJsonArray = table.Column<string>(nullable: false),
+                    TypeJsonArrayN = table.Column<string>(nullable: true),
+                    TypeJsonObject = table.Column<string>(nullable: false),
+                    TypeJsonObjectN = table.Column<string>(nullable: true),
                     TypeString = table.Column<string>(nullable: false),
                     TypeString255 = table.Column<string>(maxLength: 255, nullable: false),
                     TypeString255N = table.Column<string>(maxLength: 255, nullable: true),
@@ -206,22 +206,16 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Migrations
                 name: "GeneratedContacts",
                 columns: table => new
                 {
-                    Id = table.Column<Guid>(nullable: false),
-                    Address = table.Column<string>(type: @"VARCHAR(63) GENERATED ALWAYS AS (
-						CONCAT_WS(', ',
-							`ContactInfo` ->> ""$.Address"",
-                            `ContactInfo` ->> ""$.City"",
-                            `ContactInfo` ->> ""$.State"",
-                            `ContactInfo` ->> ""$.Zip""
-						)) STORED", nullable: true),
-                    ContactInfo = table.Column<JsonObject<Dictionary<string, string>>>(nullable: true),
-                    Email = table.Column<string>(type: @"VARCHAR(63) GENERATED ALWAYS AS (
-						`ContactInfo` ->> ""$.Email""
-					) VIRTUAL", nullable: true),
-                    Name = table.Column<string>(type: @"VARCHAR(63) GENERATED ALWAYS AS (
-						`Names` ->> ""$[0]""
-					) VIRTUAL", nullable: true),
-                    Names = table.Column<JsonObject<List<string>>>(nullable: true)
+                    Id = table.Column<Guid>(nullable: false)
+                        .Annotation("MySql:ValueGeneratedOnAdd", true),
+                    Address = table.Column<string>(type: "VARCHAR(63)", nullable: true, computedColumnSql: "CONCAT_WS(', ',	JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, \"$.Address\")), JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, \"$.City\")), JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, \"$.State\")), JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, \"$.Zip\")))")
+                        .Annotation("MySql:ValueGeneratedOnAddOrUpdate", true),
+                    ContactInfo = table.Column<string>(nullable: true),
+                    Email = table.Column<string>(type: "VARCHAR(63)", nullable: true, computedColumnSql: "JSON_UNQUOTE(JSON_EXTRACT(`ContactInfo`, \"$.Email\"))")
+                        .Annotation("MySql:ValueGeneratedOnAddOrUpdate", true),
+                    Name = table.Column<string>(type: "VARCHAR(63)", nullable: true, computedColumnSql: "JSON_UNQUOTE(JSON_EXTRACT(`Names`, \"$[0]\"))")
+                        .Annotation("MySql:ValueGeneratedOnAddOrUpdate", true),
+                    Names = table.Column<string>(nullable: true)
                 },
                 constraints: table =>
                 {

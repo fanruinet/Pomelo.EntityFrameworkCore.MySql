@@ -5,13 +5,15 @@ using Xunit;
 
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
 {
-    public class UpdatesMySqlTest : UpdatesRelationalTestBase<UpdatesMySqlFixture>
+    public partial class UpdatesMySqlTest : UpdatesRelationalTestBase<UpdatesMySqlFixture>
     {
         public UpdatesMySqlTest(UpdatesMySqlFixture fixture)
             : base(fixture)
         {
+            fixture.TestSqlLoggerFactory.Clear();
         }
 
+        [ConditionalFact]
         public override void Identifiers_are_generated_correctly()
         {
             using (var context = CreateContext())
@@ -21,7 +23,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests
                 Assert.Equal("LoginEntityTypeWithAnExtremelyLongAndOverlyConvolutedNameThatIs~", entityType.GetTableName());
                 Assert.Equal("PK_LoginEntityTypeWithAnExtremelyLongAndOverlyConvolutedNameTha~", entityType.GetKeys().Single().GetName());
                 Assert.Equal("FK_LoginEntityTypeWithAnExtremelyLongAndOverlyConvolutedNameTha~", entityType.GetForeignKeys().Single().GetConstraintName());
-                Assert.Equal("IX_LoginEntityTypeWithAnExtremelyLongAndOverlyConvolutedNameTha~", entityType.GetIndexes().Single().GetName());
+                Assert.Equal("IX_LoginEntityTypeWithAnExtremelyLongAndOverlyConvolutedNameTha~", entityType.GetIndexes().Single().GetDatabaseName());
             }
         }
     }

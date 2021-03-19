@@ -1,12 +1,9 @@
-﻿using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore.Query;
-using Microsoft.EntityFrameworkCore.TestUtilities.Xunit;
-using Xunit;
+﻿using Microsoft.EntityFrameworkCore.Query;
 using Xunit.Abstractions;
 
 namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.Query
 {
-    public class AsyncGearsOfWarQueryMySqlTest : AsyncGearsOfWarQueryTestBase<GearsOfWarQueryMySqlFixture>
+    public class AsyncGearsOfWarQueryMySqlTest : AsyncGearsOfWarQueryRelationalTestBase<GearsOfWarQueryMySqlFixture>
     {
         public AsyncGearsOfWarQueryMySqlTest(GearsOfWarQueryMySqlFixture fixture, ITestOutputHelper testOutputHelper)
             : base(fixture)
@@ -14,5 +11,8 @@ namespace Pomelo.EntityFrameworkCore.MySql.FunctionalTests.Query
             Fixture.TestSqlLoggerFactory.Clear();
             //Fixture.TestSqlLoggerFactory.SetTestOutputHelper(testOutputHelper);
         }
+
+        protected override bool CanExecuteQueryString
+            => true;
     }
 }

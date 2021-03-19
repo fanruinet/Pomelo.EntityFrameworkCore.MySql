@@ -1,6 +1,8 @@
+// Copyright (c) Pomelo Foundation. All rights reserved.
+// Licensed under the MIT. See LICENSE in the project root for license information.
+
 using System;
 using System.Data.Common;
-using MySql.Data.MySqlClient;
 
 namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 {
@@ -11,6 +13,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
         public const string ScaffoldPrefix = "Scaffold:";
         public const string CharSetKey = ScaffoldPrefix + "CharSet";
         public const string CollationKey = ScaffoldPrefix + "Collation";
+        public const string ViewsKey = ScaffoldPrefix + "Views";
 
         private readonly DbConnectionStringBuilder _csb;
 
@@ -20,10 +23,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 
             CharSet = GetBoolean(CharSetKey, true);
             Collation = GetBoolean(CollationKey, true);
+            Views = GetBoolean(ViewsKey, true);
         }
 
         public bool CharSet { get; set; }
         public bool Collation { get; set; }
+        public bool Views { get; set; }
 
         public string GetProviderCompatibleConnectionString()
         {
@@ -31,6 +36,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 
             csb.Remove(CharSetKey);
             csb.Remove(CollationKey);
+            csb.Remove(ViewsKey);
 
             return csb.ConnectionString;
         }
@@ -72,7 +78,9 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
 
         protected bool Equals(MySqlScaffoldingConnectionSettings other)
         {
-            return CharSet == other.CharSet && Collation == other.Collation;
+            return CharSet == other.CharSet &&
+                   Collation == other.Collation &&
+                   Views == other.Views;
         }
 
         public override bool Equals(object obj)

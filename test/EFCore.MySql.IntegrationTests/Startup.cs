@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Buffers;
-using System.Data.Common;
-using System.Diagnostics;
 using Pomelo.EntityFrameworkCore.MySql.IntegrationTests.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -11,8 +9,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 using Newtonsoft.Json;
+using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
+using Pomelo.EntityFrameworkCore.MySql.Tests;
 
 namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests
 {
@@ -57,11 +57,15 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests
         public static void ConfigureEntityFramework(IServiceCollection services)
         {
             services.AddDbContextPool<AppDb>(
-                options => options.UseMySql(GetConnectionString(),
+                options => options.UseMySql(
+                    GetConnectionString(),
+                    AppConfig.ServerVersion,
                     mysqlOptions =>
                     {
                         mysqlOptions.MaxBatchSize(AppConfig.EfBatchSize);
-                        mysqlOptions.ServerVersion(AppConfig.Config["Data:ServerVersion"]);
+                        mysqlOptions.CharSetBehavior(CharSetBehavior.NeverAppend);
+                        mysqlOptions.UseNewtonsoftJson();
+
                         if (AppConfig.EfRetryOnFailure > 0)
                         {
                             mysqlOptions.EnableRetryOnFailure(AppConfig.EfRetryOnFailure, TimeSpan.FromSeconds(5), null);
@@ -72,7 +76,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.IntegrationTests
 
         private static string GetConnectionString()
         {
-            var csb = new MySqlConnectionStringBuilder(AppConfig.Config["Data:ConnectionString"]);
+            var csb = new MySqlConnectionStringBuilder(AppConfig.ConnectionString);
 
             if (AppConfig.EfDatabase != null)
             {

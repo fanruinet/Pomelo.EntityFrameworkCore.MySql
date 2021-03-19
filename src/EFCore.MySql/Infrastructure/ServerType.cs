@@ -5,7 +5,19 @@ namespace Pomelo.EntityFrameworkCore.MySql.Infrastructure
 {
     public enum ServerType
     {
+        /// <summary>
+        /// Custom server implementation
+        /// </summary>
+        Custom = -1,
+
+        /// <summary>
+        /// MySQL server
+        /// </summary>
         MySql,
+
+        /// <summary>
+        /// MariaDB server
+        /// </summary>
         MariaDb
     }
 }

@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Design.Internal;
+using Microsoft.EntityFrameworkCore.Diagnostics.Internal;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Internal;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -13,9 +15,8 @@ using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.EntityFrameworkCore.Migrations.Design;
 using Microsoft.EntityFrameworkCore.Storage;
-using Microsoft.EntityFrameworkCore.Storage.Internal;
 using Microsoft.EntityFrameworkCore.TestUtilities;
-using Microsoft.Extensions.Logging;
+using Pomelo.EntityFrameworkCore.MySql.Design.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Diagnostics.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
@@ -132,15 +133,15 @@ builder.Entity(""Pomelo.EntityFrameworkCore.MySql.Migrations.ModelSnapshotMySqlT
 
             // json not null
             [Required]
-            public JsonObject<List<string>> TypeJsonArray { get; set; }
+            public List<string> TypeJsonArray { get; set; }
 
             [Required]
-            public JsonObject<Dictionary<string, string>> TypeJsonObject { get; set; }
+            public Dictionary<string, string> TypeJsonObject { get; set; }
 
             // json null
-            public JsonObject<List<string>> TypeJsonArrayN { get; set; }
+            public List<string> TypeJsonArrayN { get; set; }
 
-            public JsonObject<Dictionary<string, string>> TypeJsonObjectN { get; set; }
+            public Dictionary<string, string> TypeJsonObjectN { get; set; }
         }
 
         protected virtual ICollection<BuildReference> GetReferences() => new List<BuildReference>
@@ -168,15 +169,21 @@ builder.Entity(""Pomelo.EntityFrameworkCore.MySql.Migrations.ModelSnapshotMySqlT
                     new ListLoggerFactory(category => category == DbLoggerCategory.Model.Validation.Name),
                     new LoggingOptions(),
                     new DiagnosticListener("Fake"),
-                    new MySqlLoggingDefinitions()));
+                    new MySqlLoggingDefinitions(),
+                    new NullDbContextLogger()));
 
             var model = modelBuilder.Model;
 
             var codeHelper = new CSharpHelper(
                 typeMappingSource);
 
+            var annotationCodeGenerator = new MySqlAnnotationCodeGenerator(
+                new AnnotationCodeGeneratorDependencies(typeMappingSource));
+
             var generator = new CSharpMigrationsGenerator(
-                new MigrationsCodeGeneratorDependencies(typeMappingSource),
+                new MigrationsCodeGeneratorDependencies(
+                    typeMappingSource,
+                    annotationCodeGenerator),
                 new CSharpMigrationsGeneratorDependencies(
                     codeHelper,
                     new CSharpMigrationOperationGenerator(
@@ -185,7 +192,8 @@ builder.Entity(""Pomelo.EntityFrameworkCore.MySql.Migrations.ModelSnapshotMySqlT
                     new CSharpSnapshotGenerator(
                         new CSharpSnapshotGeneratorDependencies(
                             codeHelper,
-                            typeMappingSource))));
+                            typeMappingSource,
+                            annotationCodeGenerator))));
 
             var code = generator.GenerateSnapshot("RootNamespace", typeof(DbContext), "Snapshot", model);
 

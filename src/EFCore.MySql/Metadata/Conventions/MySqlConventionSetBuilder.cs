@@ -1,13 +1,11 @@
-﻿// Copyright (c) .NET Foundation. All rights reserved.
-// Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
+﻿// Copyright (c) Pomelo Foundation. All rights reserved.
+// Licensed under the MIT. See LICENSE in the project root for license information.
 
 using JetBrains.Annotations;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions;
-using Microsoft.EntityFrameworkCore.Metadata.Conventions.Internal;
-using Microsoft.EntityFrameworkCore.Utilities;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions.Infrastructure;
 using Pomelo.EntityFrameworkCore.MySql.Metadata.Conventions;
+using Pomelo.EntityFrameworkCore.MySql.Storage;
 
 namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
 {
@@ -41,21 +39,17 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
 
             var valueGeneratorConvention = new MySqlValueGenerationConvention(Dependencies, RelationalDependencies);
             ReplaceConvention(conventionSet.EntityTypeBaseTypeChangedConventions, valueGeneratorConvention);
-
             ReplaceConvention(conventionSet.EntityTypePrimaryKeyChangedConventions, valueGeneratorConvention);
-
             ReplaceConvention(conventionSet.ForeignKeyAddedConventions, valueGeneratorConvention);
-
             ReplaceConvention(conventionSet.ForeignKeyRemovedConventions, valueGeneratorConvention);
-
-            conventionSet.PropertyAnnotationChangedConventions.Add((MySqlValueGenerationConvention)valueGeneratorConvention);
+            conventionSet.PropertyAnnotationChangedConventions.Add(valueGeneratorConvention);
 
             return conventionSet;
         }
 
         /// <summary>
         ///     <para>
-        ///         Call this method to build a <see cref="ConventionSet" /> for SQL Server when using
+        ///         Call this method to build a <see cref="ConventionSet" /> for MySQL when using
         ///         the <see cref="ModelBuilder" /> outside of <see cref="DbContext.OnModelCreating" />.
         ///     </para>
         ///     <para>
@@ -68,7 +62,7 @@ namespace Microsoft.EntityFrameworkCore.Metadata.Conventions
         {
             var serviceProvider = new ServiceCollection()
                 .AddEntityFrameworkMySql()
-                .AddDbContext<DbContext>(o => o.UseMySql("Server=."))
+                .AddDbContext<DbContext>(o => o.UseMySql("Server=.", MySqlServerVersion.LatestSupportedServerVersion))
                 .BuildServiceProvider();
 
             using (var serviceScope = serviceProvider.GetRequiredService<IServiceScopeFactory>().CreateScope())

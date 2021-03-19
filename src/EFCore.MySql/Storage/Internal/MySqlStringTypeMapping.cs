@@ -2,10 +2,11 @@
 // Licensed under the MIT. See LICENSE in the project root for license information.
 
 using System;
-using System.Data;
 using System.Data.Common;
 using JetBrains.Annotations;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Utilities;
+using MySqlConnector;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
 
 namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
@@ -14,35 +15,47 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
     ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
     ///     directly from your code. This API may change or be removed in future releases.
     /// </summary>
-    public class MySqlStringTypeMapping : StringTypeMapping
+    public class MySqlStringTypeMapping : MySqlTypeMapping
     {
+        private readonly bool _forceToString;
         private const int UnicodeMax = 4000;
         private const int AnsiMax = 8000;
 
         private readonly int _maxSpecificSize;
         private readonly IMySqlOptions _options;
 
-        /// <summary>
-        ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
-        ///     directly from your code. This API may change or be removed in future releases.
-        /// </summary>
+        public bool IsUnquoted { get; }
+
         public MySqlStringTypeMapping(
             [NotNull] string storeType,
-            DbType? dbType,
             IMySqlOptions options,
-            bool unicode = false,
+            StoreTypePostfix storeTypePostfix,
+            bool unicode = true,
             int? size = null,
-            bool fixedLength = false)
+            bool fixedLength = false,
+            bool unquoted = false,
+            bool forceToString = false)
             : this(
                 new RelationalTypeMappingParameters(
                     new CoreTypeMappingParameters(typeof(string)),
                     storeType,
-                    StoreTypePostfix.None, // Has to be None until EF #11896 is fixed
-                    dbType,
+                    storeTypePostfix,
+                    unicode
+                        ? fixedLength
+                            ? System.Data.DbType.StringFixedLength
+                            : System.Data.DbType.String
+                        : fixedLength
+                            ? System.Data.DbType.AnsiStringFixedLength
+                            : System.Data.DbType.AnsiString,
                     unicode,
                     size,
                     fixedLength),
-                options)
+                fixedLength
+                    ? MySqlDbType.String
+                    : MySqlDbType.VarString,
+                options,
+                unquoted,
+                forceToString)
         {
         }
 
@@ -50,11 +63,18 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
         ///     directly from your code. This API may change or be removed in future releases.
         /// </summary>
-        protected MySqlStringTypeMapping(RelationalTypeMappingParameters parameters, IMySqlOptions options)
-            : base(parameters)
+        protected MySqlStringTypeMapping(
+            RelationalTypeMappingParameters parameters,
+            MySqlDbType mySqlDbType,
+            IMySqlOptions options,
+            bool isUnquoted,
+            bool forceToString)
+            : base(parameters, mySqlDbType)
         {
             _maxSpecificSize = CalculateSize(parameters.Unicode, parameters.Size);
             _options = options;
+            _forceToString = forceToString;
+            IsUnquoted = isUnquoted;
         }
 
         private static int CalculateSize(bool unicode, int? size)
@@ -68,7 +88,10 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
         /// <param name="parameters"> The parameters for this mapping. </param>
         /// <returns> The newly created mapping. </returns>
         protected override RelationalTypeMapping Clone(RelationalTypeMappingParameters parameters)
-            => new MySqlStringTypeMapping(parameters, _options);
+            => new MySqlStringTypeMapping(parameters, MySqlDbType, _options, IsUnquoted, _forceToString);
+
+        public virtual RelationalTypeMapping Clone(bool? unquoted = null, bool? forceToString = null)
+            => new MySqlStringTypeMapping(Parameters, MySqlDbType, _options, unquoted ?? IsUnquoted, forceToString ?? _forceToString);
 
         /// <summary>
         ///     This API supports the Entity Framework Core infrastructure and is not intended to be used
@@ -82,8 +105,12 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
             // -1 (unbounded) to avoid size inference.
 
             var value = parameter.Value;
-            int? length;
+            if (_forceToString && value != null && value != DBNull.Value)
+            {
+                value = value.ToString();
+            }
 
+            int? length;
             if (value is string stringValue)
             {
                 length = stringValue.Length;
@@ -96,19 +123,31 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
             {
                 length = null;
             }
-            
-            parameter.Value = value;
+
             parameter.Size = value == null || value == DBNull.Value || length != null && length <= _maxSpecificSize
                 ? _maxSpecificSize
                 : -1;
+
+            if (parameter.Value != value)
+            {
+                parameter.Value = value;
+            }
         }
 
         protected override string GenerateNonNullSqlLiteral(object value)
-            => EscapeSqlLiteralWithLineBreaks((string)value);
-
-        private string EscapeSqlLiteralWithLineBreaks(string value)
         {
-            var escapedLiteral = $"'{EscapeSqlLiteral(value)}'";
+            var stringValue = _forceToString
+                ? value.ToString()
+                : (string)value;
+
+            return IsUnquoted
+                ? EscapeSqlLiteral(stringValue)
+                : EscapeSqlLiteralWithLineBreaks(stringValue, _options);
+        }
+
+        public static string EscapeSqlLiteralWithLineBreaks(string value, IMySqlOptions options)
+        {
+            var escapedLiteral = $"'{EscapeSqlLiteral(value, options)}'";
 
             // BUG: EF Core indents idempotent scripts, which can lead to unexpected values for strings
             //      that contain line breaks.
@@ -116,7 +155,7 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
             //
             //      Convert line break characters to their CHAR() representation as a workaround.
 
-            if (_options.ReplaceLineBreaksWithCharFunction
+            if (options.ReplaceLineBreaksWithCharFunction
                 && (value.Contains("\r") || value.Contains("\n")))
             {
                 escapedLiteral = "CONCAT(" + escapedLiteral
@@ -128,12 +167,15 @@ namespace Pomelo.EntityFrameworkCore.MySql.Storage.Internal
             return escapedLiteral;
         }
 
-        protected override string EscapeSqlLiteral(string literal)
-            => EscapeBackslashes(base.EscapeSqlLiteral(literal));
+        protected virtual string EscapeSqlLiteral(string literal)
+            => EscapeSqlLiteral(literal, _options);
 
-        private string EscapeBackslashes(string literal)
+        public static string EscapeSqlLiteral(string literal, IMySqlOptions options)
+            => EscapeBackslashes(Check.NotNull(literal, nameof(literal)).Replace("'", "''"), options);
+
+        public static string EscapeBackslashes(string literal, IMySqlOptions options)
         {
-            return _options.NoBackslashEscapes
+            return options.NoBackslashEscapes
                 ? literal
                 : literal.Replace(@"\", @"\\");
         }

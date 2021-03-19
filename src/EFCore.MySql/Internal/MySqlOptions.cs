@@ -2,24 +2,27 @@
 // Licensed under the MIT. See LICENSE in the project root for license information.
 
 using System;
+using System.Linq;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure.Internal;
 using Pomelo.EntityFrameworkCore.MySql.Storage.Internal;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using MySql.Data.MySqlClient;
+using MySqlConnector;
 using Pomelo.EntityFrameworkCore.MySql.Storage;
 
 namespace Pomelo.EntityFrameworkCore.MySql.Internal
 {
     public class MySqlOptions : IMySqlOptions
     {
+        private static readonly MySqlSchemaNameTranslator _ignoreSchemaNameTranslator = (_, objectName) => objectName;
+
         public MySqlOptions()
         {
             ConnectionSettings = new MySqlConnectionSettings();
-            ServerVersion = new ServerVersion(null);
-            CharSetBehavior = CharSetBehavior.AppendToAllColumns;
+            ServerVersion = null;
+            CharSetBehavior = CharSetBehavior.AppendToAllColumns; // TODO: Change to `NeverAppend` for EF Core 5.
 
             // We do not use the MySQL versions's default, but explicitly use `utf8mb4`
             // if not changed by the user.
@@ -30,31 +33,44 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
 
             ReplaceLineBreaksWithCharFunction = true;
             DefaultDataTypeMappings = new MySqlDefaultDataTypeMappings();
+
+            // Throw by default if a schema is being used with any type.
+            SchemaNameTranslator = null;
+
+            // TODO: Change to `true` for EF Core 5.
+            IndexOptimizedBooleanColumns = false;
         }
 
         public virtual void Initialize(IDbContextOptions options)
         {
             var mySqlOptions = options.FindExtension<MySqlOptionsExtension>() ?? new MySqlOptionsExtension();
+            var mySqlJsonOptions = (MySqlJsonOptionsExtension)options.Extensions.LastOrDefault(e => e is MySqlJsonOptionsExtension);
 
             ConnectionSettings = GetConnectionSettings(mySqlOptions);
-            ServerVersion = mySqlOptions.ServerVersion ?? ServerVersion;
+            ServerVersion = mySqlOptions.ServerVersion ?? throw new InvalidOperationException($"The {nameof(ServerVersion)} has not been set.");
             CharSetBehavior = mySqlOptions.NullableCharSetBehavior ?? CharSetBehavior;
             CharSet = mySqlOptions.CharSet ?? CharSet;
             NoBackslashEscapes = mySqlOptions.NoBackslashEscapes;
             ReplaceLineBreaksWithCharFunction = mySqlOptions.ReplaceLineBreaksWithCharFunction;
             DefaultDataTypeMappings = ApplyDefaultDataTypeMappings(mySqlOptions.DefaultDataTypeMappings, ConnectionSettings);
+            SchemaNameTranslator = mySqlOptions.SchemaNameTranslator ?? (mySqlOptions.SchemaBehavior == MySqlSchemaBehavior.Ignore
+                ? _ignoreSchemaNameTranslator
+                : null);
+            IndexOptimizedBooleanColumns = mySqlOptions.IndexOptimizedBooleanColumns;
+            JsonChangeTrackingOptions = mySqlJsonOptions?.JsonChangeTrackingOptions ?? default;
         }
 
         public virtual void Validate(IDbContextOptions options)
         {
             var mySqlOptions = options.FindExtension<MySqlOptionsExtension>() ?? new MySqlOptionsExtension();
+            var mySqlJsonOptions = (MySqlJsonOptionsExtension)options.Extensions.LastOrDefault(e => e is MySqlJsonOptionsExtension);
             var connectionSettings = GetConnectionSettings(mySqlOptions);
 
-            if (!Equals(ServerVersion, mySqlOptions.ServerVersion ?? new ServerVersion(null)))
+            if (!Equals(ServerVersion, mySqlOptions.ServerVersion))
             {
                 throw new InvalidOperationException(
                     CoreStrings.SingletonOptionChanged(
-                        nameof(MySqlDbContextOptionsBuilder.ServerVersion),
+                        nameof(MySqlOptionsExtension.ServerVersion),
                         nameof(DbContextOptionsBuilder.UseInternalServiceProvider)));
             }
 
@@ -113,20 +129,72 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
                         nameof(MySqlDbContextOptionsBuilder.DefaultDataTypeMappings),
                         nameof(DbContextOptionsBuilder.UseInternalServiceProvider)));
             }
+
+            if (!Equals(
+                SchemaNameTranslator,
+                mySqlOptions.SchemaBehavior == MySqlSchemaBehavior.Ignore
+                    ? _ignoreSchemaNameTranslator
+                    : SchemaNameTranslator))
+            {
+                throw new InvalidOperationException(
+                    CoreStrings.SingletonOptionChanged(
+                        nameof(MySqlDbContextOptionsBuilder.SchemaBehavior),
+                        nameof(DbContextOptionsBuilder.UseInternalServiceProvider)));
+            }
+
+            if (!Equals(IndexOptimizedBooleanColumns, mySqlOptions.IndexOptimizedBooleanColumns))
+            {
+                throw new InvalidOperationException(
+                    CoreStrings.SingletonOptionChanged(
+                        nameof(MySqlDbContextOptionsBuilder.EnableIndexOptimizedBooleanColumns),
+                        nameof(DbContextOptionsBuilder.UseInternalServiceProvider)));
+            }
+
+            if (!Equals(JsonChangeTrackingOptions, mySqlJsonOptions?.JsonChangeTrackingOptions ?? default))
+            {
+                throw new InvalidOperationException(
+                    CoreStrings.SingletonOptionChanged(
+                        nameof(MySqlJsonOptionsExtension.JsonChangeTrackingOptions),
+                        nameof(DbContextOptionsBuilder.UseInternalServiceProvider)));
+            }
         }
 
         protected virtual MySqlDefaultDataTypeMappings ApplyDefaultDataTypeMappings(MySqlDefaultDataTypeMappings defaultDataTypeMappings, MySqlConnectionSettings connectionSettings)
         {
             defaultDataTypeMappings ??= DefaultDataTypeMappings;
 
-            if (connectionSettings.TreatTinyAsBoolean)
+            // Explicitly set MySqlDefaultDataTypeMappings values take precedence over connection string options.
+            if (connectionSettings.TreatTinyAsBoolean.HasValue &&
+                defaultDataTypeMappings.ClrBoolean == MySqlBooleanType.Default)
             {
-                defaultDataTypeMappings = defaultDataTypeMappings.WithClrBoolean(MySqlBooleanType.TinyInt1);
+                defaultDataTypeMappings = defaultDataTypeMappings.WithClrBoolean(
+                    connectionSettings.TreatTinyAsBoolean.Value
+                        ? MySqlBooleanType.TinyInt1
+                        : MySqlBooleanType.Bit1);
             }
-            else if (defaultDataTypeMappings.ClrBoolean != MySqlBooleanType.Bit1 &&
-                     defaultDataTypeMappings.ClrBoolean != MySqlBooleanType.None)
+
+            if (defaultDataTypeMappings.ClrDateTime == MySqlDateTimeType.Default)
             {
-                defaultDataTypeMappings = defaultDataTypeMappings.WithClrBoolean(MySqlBooleanType.Bit1);
+                defaultDataTypeMappings = defaultDataTypeMappings.WithClrDateTime(
+                    ServerVersion.Supports.DateTime6
+                        ? MySqlDateTimeType.DateTime6
+                        : MySqlDateTimeType.DateTime);
+            }
+
+            if (defaultDataTypeMappings.ClrDateTimeOffset == MySqlDateTimeType.Default)
+            {
+                defaultDataTypeMappings = defaultDataTypeMappings.WithClrDateTimeOffset(
+                    ServerVersion.Supports.DateTime6
+                        ? MySqlDateTimeType.DateTime6
+                        : MySqlDateTimeType.DateTime);
+            }
+
+            if (defaultDataTypeMappings.ClrTimeSpan == MySqlTimeSpanType.Default)
+            {
+                defaultDataTypeMappings = defaultDataTypeMappings.WithClrTimeSpan(
+                    ServerVersion.Supports.DateTime6
+                        ? MySqlTimeSpanType.Time6
+                        : MySqlTimeSpanType.Time);
             }
 
             return defaultDataTypeMappings;
@@ -156,7 +224,10 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
                    Equals(NationalCharSet, other.NationalCharSet) &&
                    NoBackslashEscapes == other.NoBackslashEscapes &&
                    ReplaceLineBreaksWithCharFunction == other.ReplaceLineBreaksWithCharFunction &&
-                   Equals(DefaultDataTypeMappings, other.DefaultDataTypeMappings);
+                   Equals(DefaultDataTypeMappings, other.DefaultDataTypeMappings) &&
+                   Equals(SchemaNameTranslator, other.SchemaNameTranslator) &&
+                   IndexOptimizedBooleanColumns == other.IndexOptimizedBooleanColumns &&
+                   JsonChangeTrackingOptions == other.JsonChangeTrackingOptions;
         }
 
         public override bool Equals(object obj)
@@ -181,26 +252,31 @@ namespace Pomelo.EntityFrameworkCore.MySql.Internal
 
         public override int GetHashCode()
         {
-            unchecked
-            {
-                var hashCode = ConnectionSettings != null ? ConnectionSettings.GetHashCode() : 0;
-                hashCode = (hashCode * 397) ^ (ServerVersion != null ? ServerVersion.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (int)CharSetBehavior;
-                hashCode = (hashCode * 397) ^ (CharSet != null ? CharSet.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ (NationalCharSet != null ? NationalCharSet.GetHashCode() : 0);
-                hashCode = (hashCode * 397) ^ NoBackslashEscapes.GetHashCode();
-                hashCode = (hashCode * 397) ^ ReplaceLineBreaksWithCharFunction.GetHashCode();
-                return hashCode;
-            }
+            var hashCode = new HashCode();
+            hashCode.Add(ConnectionSettings);
+            hashCode.Add(ServerVersion);
+            hashCode.Add((int) CharSetBehavior);
+            hashCode.Add(CharSet);
+            hashCode.Add(NationalCharSet);
+            hashCode.Add(NoBackslashEscapes);
+            hashCode.Add(ReplaceLineBreaksWithCharFunction);
+            hashCode.Add(DefaultDataTypeMappings);
+            hashCode.Add(SchemaNameTranslator);
+            hashCode.Add(IndexOptimizedBooleanColumns);
+            hashCode.Add(JsonChangeTrackingOptions);
+            return hashCode.ToHashCode();
         }
 
         public virtual MySqlConnectionSettings ConnectionSettings { get; private set; }
         public virtual ServerVersion ServerVersion { get; private set; }
         public virtual CharSetBehavior CharSetBehavior { get; private set; }
         public virtual CharSet CharSet { get; private set; }
-        public CharSet NationalCharSet { get; }
+        public virtual CharSet NationalCharSet { get; }
         public virtual bool NoBackslashEscapes { get; private set; }
         public virtual bool ReplaceLineBreaksWithCharFunction { get; private set; }
         public virtual MySqlDefaultDataTypeMappings DefaultDataTypeMappings { get; private set; }
+        public virtual MySqlSchemaNameTranslator SchemaNameTranslator { get; private set; }
+        public virtual bool IndexOptimizedBooleanColumns { get; private set; }
+        public virtual MySqlJsonChangeTrackingOptions JsonChangeTrackingOptions { get; private set; }
     }
 }
